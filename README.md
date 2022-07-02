@@ -20,7 +20,7 @@ Project uses [WTFPL](http://www.wtfpl.net/) license
 - [x] Null move prunning
 - [x] PVS (principle variation search)
 - [x] LMR (late move reduction)
-- [] Tapered evaluation 
-- [] Razoring 
-- [] Static evaluation prunning
+- [ ] Tapered evaluation 
+- [ ] Razoring 
+- [ ] Static evaluation prunning
 
