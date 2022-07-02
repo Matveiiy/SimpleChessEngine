@@ -1585,16 +1585,10 @@ namespace ChessEngine
         template<bool IsWhite, bool HasTime>
         int quiet_search(int alpha, int beta) {
             nodes++;
+            if (is_repetition(board.current_key)) return EVAL_DRAW+DRAW_TUNE;
             auto eval = Evaluate<IsWhite>();
             if (eval >= beta) return beta;
             if (eval > alpha) alpha = eval;
-            if (UCI::stopped) return eval;
-            if constexpr (HasTime){
-                if (get_time_ms() > stoptime) {
-                    UCI::stopped = true;
-                    return eval;
-                }
-            }
             if (ply > MAX_PLY-1) return eval;
             MoveList moves;
             board.GenMovesUnchecked<IsWhite>(moves);
@@ -1636,13 +1630,6 @@ namespace ChessEngine
             if (ply && !pv_node && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH) return score;
             if (depth == 0) return quiet_search<IsWhite, HasTime>(alpha, beta);
             if (ply > MAX_PLY-1) return Evaluate<IsWhite>();
-            if (UCI::stopped) return Evaluate<IsWhite>();
-            if constexpr (HasTime) {
-                if (get_time_ms() > stoptime) {
-                    UCI::stopped = true;
-                    return Evaluate<IsWhite>();
-                }
-            }
             //best = NullMove;
             ++nodes;
             bool in_check = board.IsKingInCheck<IsWhite>();
@@ -1652,7 +1639,7 @@ namespace ChessEngine
                 //static eval prunning
                 if (depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
                     int eval_margin = 120 * depth;
-                    if (static_eval - eval_margin >= beta) return beta;
+                    if (static_eval - eval_margin >= beta) return static_eval - eval_margin;
                 }
                 //null move prunning
                 if (depth>=3 && ply) {
@@ -1679,6 +1666,9 @@ namespace ChessEngine
                     board.move_count--;
                     board.current_key^=board.side_key;
                     follow_pv = saved_pv;
+                    
+                    if (UCI::stopped) return 0;
+                    if constexpr (HasTime) {if (get_time_ms() > stoptime) {UCI::stopped = true;return 0;}}
                     if (score >= beta) {
                         return beta;
                     }
@@ -1713,7 +1703,7 @@ namespace ChessEngine
                 auto move = moves.move_storage[i];
                 board.MakeMove<IsWhite>(move);
                 if (board.IsKingInCheck<IsWhite>()) {board.UndoMove<IsWhite>(move);continue;}
-                ++ply;++temp_move_count;repetition_table[++repetition_index] = board.current_key;
+                ++ply;repetition_table[++repetition_index] = board.current_key;
                 if (!temp_move_count) score = -negamax<!IsWhite, HasTime>(depth-1, -beta, -alpha);
                 //Late move reduction
                 else {
@@ -1733,19 +1723,22 @@ namespace ChessEngine
                             score = -negamax<!IsWhite, HasTime>(depth - 1, -beta, -alpha);
                     }
                 }
-                --ply;--repetition_index;
+                --ply;--repetition_index;++temp_move_count;
                 board.UndoMove<IsWhite>(move);
                 //1717016
                 //R4r1k/6pp/2pq4/2n2b2/2Q1pP1b/1r2P2B/NP5P/2B2KNR b - - 1 24
                 //1012458 => 980435
                 //8145000 => 5923000
+                
+                if (UCI::stopped) return 0;
+                if constexpr (HasTime) {if (get_time_ms() > stoptime) {UCI::stopped = true;return 0;}}
                 if (score >= beta) {
                     if (!GetMoveCapture(move)) {
                         killers[1][ply] = killers[0][ply];
                         killers[0][ply] = moves.move_storage[i];
                         //history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)] += depth;
                     }
-                    if (!UCI::stopped) write_hash_entry(depth, board.current_key, beta, HASHF_BETA, moves.move_storage[i]);
+                    write_hash_entry(depth, board.current_key, beta, HASHF_BETA, moves.move_storage[i]);
                     return beta;
                 }
                 if (score > alpha) {
@@ -1754,14 +1747,13 @@ namespace ChessEngine
                     
                     alpha = score;
                     hashf = HASHF_EXACT;
+
                     // write PV move
                     pv_table[ply][ply] = moves.move_storage[i];
-                    
                     // loop over the next ply
                     for (int next_ply = ply + 1; next_ply < pv_length[ply + 1]; next_ply++)
                         // copy move from deeper ply into a current ply's line
                         pv_table[ply][next_ply] = pv_table[ply + 1][next_ply];
-                    
                     // adjust PV length
                     pv_length[ply] = pv_length[ply + 1];
                 }
@@ -1772,7 +1764,7 @@ namespace ChessEngine
                 }
                 return EVAL_DRAW+DRAW_TUNE;
             }
-            if (!UCI::stopped) write_hash_entry(depth, board.current_key, alpha, hashf, best);
+            write_hash_entry(depth, board.current_key, alpha, hashf, best);
             return alpha;
         }
         void Init() {
@@ -2240,6 +2232,7 @@ namespace ChessEngine
 
         if(wbishops >= 2) score += BishopPair;
         if(bbishops >= 2) score -= BishopPair;
+
         score+=wmaterial-bmaterial;
 
         if constexpr (IsWhite) return score;
