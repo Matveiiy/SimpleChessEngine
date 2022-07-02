@@ -2,7 +2,7 @@
 #### In development...
 ![](https://github.com/Matveiiy/SimpleChessEngine/blob/main/logo.png)
 
-SCE is a chess engine written in educational purposes. Its rating is aproximatly 1690 - 1750 elo. It uses UCI protocol to communicate with GUI interface. It was not tested on linux!
+SCE is a chess engine written in educational purposes. Its rating is aproximatly 1690 - 1750 elo. SCE won shallow blue and tscp It uses UCI protocol to communicate with GUI interface. It was not tested on linux!
 ### Installation
 All code is in one file. Just use makefile or any other tool you want to compile it
 ### License
