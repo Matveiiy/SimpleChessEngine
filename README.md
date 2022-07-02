@@ -19,4 +19,3 @@ Project uses [WTFPL](http://www.wtfpl.net/) license
 - LMR (late move reduction)
 - Simple tapered evaluation
 
-### No logo yet((
