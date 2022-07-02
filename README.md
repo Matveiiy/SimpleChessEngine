@@ -11,15 +11,16 @@ All code is in one file. Just use makefile or any other tool you want to compile
 ### License
 Project uses [WTFPL](http://www.wtfpl.net/) license
 ### Features
-- UCI protocol
-- Bitboard board representation
-- Encoding moves as integers
-- Negamax algorithm with alpha beta prunning
-- PV/killer/history/hash move ordering
-- Iterative deepening
-- Null move and static evaluation prunning 
-- Razoring
-- PVS (principle variation search)
-- LMR (late move reduction)
-- Simple tapered evaluation
+- [x] UCI protocol
+- [x] Bitboard board representation
+- [x] Encoding moves as integers
+- [x] Negamax algorithm with alpha beta prunning
+- [x] PV/killer/history/hash move ordering
+- [x] Iterative deepening
+- [x] Null move prunning
+- [x] PVS (principle variation search)
+- [x] LMR (late move reduction)
+- [] Tapered evaluation 
+- [] Razoring 
+- [] Static evaluation prunning
 
