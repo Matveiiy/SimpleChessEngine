@@ -1627,7 +1627,7 @@ namespace ChessEngine
             Move best = NullMove;
             if (ply && is_repetition(board.current_key)) return EVAL_DRAW+DRAW_TUNE;
             bool pv_node = beta-alpha > 1;
-            if (ply && !pv_node && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH) return score;
+            if (ply && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH && !pv_node) return score;
             if (depth == 0) return quiet_search<IsWhite, HasTime>(alpha, beta);
             if (ply > MAX_PLY-1) return Evaluate<IsWhite>();
             //best = NullMove;
@@ -1635,9 +1635,10 @@ namespace ChessEngine
             bool in_check = board.IsKingInCheck<IsWhite>();
             if (in_check) depth++;
             else {
-                int static_eval = Evaluate<IsWhite>();
+                int static_eval = 0;
+                //int static_eval = Evaluate<IsWhite>();
                 //static eval prunning
-                if (depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
+                if (false && depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
                     int eval_margin = 120 * depth;
                     if (static_eval - eval_margin >= beta) return static_eval - eval_margin;
                 }
@@ -1674,7 +1675,7 @@ namespace ChessEngine
                     }
                 }
                 //razoring
-                if (!pv_node && depth <= 3) {
+                if (false && !pv_node && depth <= 3) {
                     score = static_eval + 125;
                     int new_score;
                     if (score < beta) {
@@ -1769,17 +1770,16 @@ namespace ChessEngine
         }
         void Init() {
             board.InitBoard();
-            if (use_book) {
-                book.open("simple.book");
-                if (book.fail()) {
-                    std::cout << "Warning! Book not found!\n";
-                    use_book = false;
-                }
+            book.open("simple.book");
+            if (book.fail()) {
+                std::cout << "Warning! Book not found!\n";
+                use_book = false;
             }
         }
     public:
     #ifndef USE_NNUE
     #if 0
+    //  TSCP eval
         #define KINGS_PAWN_MOVED_ONE_PENALTY    10
         #define KINGS_PAWN_MOVED_TWO_PENALTY    20
         #define NO_KINGS_PAWN_PENALTY           25
@@ -1979,7 +1979,7 @@ namespace ChessEngine
                 if (double_pawns > 1) wscore -= DOUBLE_PAWN_PENALTY;
 
                 if (!(board.bboard[(int)ColorPiece::WP] & Board::GetIsolatedMaskSquare(square))) wscore-=ISOLATED_PAWN_PENALTY;
-                //if (!(board.bboard[(int)ColorPiece::BP] & Board::GetPassedMaskSquare<true>(square))) wscore+=(7 - square/8) * PASSED_PAWN_BONUS;
+                if (!(board.bboard[(int)ColorPiece::BP] & Board::GetPassedMaskSquare<true>(square))) wscore+=(square/8) * PASSED_PAWN_BONUS;
             }  
             bb = board.bboard[(int)ColorPiece::BP];
             while (bb) {
@@ -1989,10 +1989,10 @@ namespace ChessEngine
 
                 const int double_pawns = count_bits(board.bboard[(int)ColorPiece::BP] & Board::GetFileMaskSquare(square));
                 if (double_pawns > 1) bscore -= DOUBLE_PAWN_PENALTY;
-                //if (!(board.bboard[(int)ColorPiece::BP] & Board::GetIsolatedMaskSquare(square))) bscore-=ISOLATED_PAWN_PENALTY;
-                //if (!(board.bboard[(int)ColorPiece::WP] & Board::GetPassedMaskSquare<false>(flip[square]))) bscore+=(7 - flip[square]/8) * PASSED_PAWN_BONUS;
+                if (!(board.bboard[(int)ColorPiece::BP] & Board::GetIsolatedMaskSquare(square))) bscore-=ISOLATED_PAWN_PENALTY;
+                if (!(board.bboard[(int)ColorPiece::WP] & Board::GetPassedMaskSquare<false>(square))) bscore+=(flip[square]/8) * PASSED_PAWN_BONUS;
             }
-            std::cout << wscore << ' ' << bscore << std::endl;
+            //std::cout << wscore << ' ' << bscore << std::endl;
             bb = board.bboard[(int)ColorPiece::WN];
             while (bb) {
                 const int square = bit_scan_forward(bb);reset_lsb(bb);
@@ -2005,7 +2005,7 @@ namespace ChessEngine
                 bpiece_material += piece_value[(int)ColorPiece::BN];
                 bscore += knight_pcsq[flip[square]];
             }
-            std::cout << wscore << ' ' << bscore << std::endl;
+            //std::cout << wscore << ' ' << bscore << std::endl;
             bb = board.bboard[(int)ColorPiece::WB];
             while (bb) {
                 const int square = bit_scan_forward(bb);reset_lsb(bb);
@@ -2020,14 +2020,14 @@ namespace ChessEngine
                 bscore += bishop_pcsq[flip[square]];
                 bbishops++;
             }
-            std::cout << wscore << ' ' << bscore << std::endl;
+            //std::cout << wscore << ' ' << bscore << std::endl;
             bb = board.bboard[(int)ColorPiece::WR];
             while (bb) {
                 const int square = bit_scan_forward(bb);reset_lsb(bb);
                 wpiece_material += piece_value[(int)ColorPiece::WR];
                 if (square/8 == 6) wscore+=ROOK_ON_SEVENTH_BONUS;
-                //if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(square))) wscore+=ROOK_SEMI_OPEN_FILE_BONUS;
-                //if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(square))) wscore+=ROOK_OPEN_FILE_BONUS;
+                if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(square))) wscore+=ROOK_SEMI_OPEN_FILE_BONUS;
+                if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(square))) wscore+=ROOK_OPEN_FILE_BONUS;
             }
             bb = board.bboard[(int)ColorPiece::BR];
             while (bb) {
@@ -2039,7 +2039,7 @@ namespace ChessEngine
             }
             wpiece_material+=count_bits(board.bboard[(int)ColorPiece::WQ])*piece_value[(int)ColorPiece::WQ];
             bpiece_material+=count_bits(board.bboard[(int)ColorPiece::BQ])*piece_value[(int)ColorPiece::BQ];
-            std::cout << wscore << ' ' << bscore << std::endl;
+            //std::cout << wscore << ' ' << bscore << std::endl;
             //------------------------------------------------------
             const int wking = bit_scan_forward(board.bboard[(int)ColorPiece::WK]);
             const int bking = bit_scan_forward(board.bboard[(int)ColorPiece::BK]);
@@ -2047,7 +2047,7 @@ namespace ChessEngine
             else wscore += eval_light_king(wking, bpiece_material);
             if (wpiece_material <= ENDGAME_PHASE) bscore += king_endgame_pcsq[flip[bking]];
 			else bscore += eval_dark_king(bking, wpiece_material);
-            std::cout << wscore << ' ' << bscore << std::endl;
+            //std::cout << wscore << ' ' << bscore << std::endl;
             //std::cout << wpiece_material << ' ' << bpiece_material << std::endl;
             //std::cout << wpawn_material << ' ' << bpawn_material << std::endl;
             if constexpr (IsWhite) return wscore + wpiece_material + wpawn_material - bpiece_material - bpawn_material - bscore;
@@ -2056,7 +2056,7 @@ namespace ChessEngine
             //else return bscore + bpiece_material + bpawn_material - wscore - wpiece_material - wpawn_material;
         }
     #else 
-    
+    //VICE evaluation
     static constexpr int PieceVal[13] = { 0, 100, 325, 325, 550, 1000, 50000, 100, 325, 325, 550, 1000, 50000 };
     static constexpr int PawnIsolated = 10;
     static constexpr int PawnPassed[8] = { 0, 5, 10, 20, 35, 60, 100, 200 };
@@ -2337,6 +2337,8 @@ namespace ChessEngine
             std::atomic_bool quiting = false;
             std::thread search_thread, timethread;
             std::cout << "Simple chess engine by motya\n";
+            std::cout << "communicate using UCI\n";
+            //std::cout << "For more info write   help  \n";
             std::string cmd;
             bool timeset = false, time_up = false, last_was_startpos = false;
             UCI::stopped = true;
@@ -2362,20 +2364,22 @@ namespace ChessEngine
                 if (cmd == "isready") {
                     std::cout << "readyok\n";
                 }
-                else if (cmd == "help") {
-                    std::cout << "Simple chess engine by motya\n";
-                    std::cout << "Commands:\n";
-                    std::cout << "  uci                                                     start engine\n";
-                    std::cout << "  isready\n                                               check if engine is ready\n";
-                    std::cout << "  setoption name <name> value <value>\n";
-                    std::cout << "  ucinewgame\n                                            create new game";
-                    std::cout << "  position <startpos | fen <fenstring>> moves <moves>     sets position \n";
-                    std::cout << "  go [<wtime> <btime> <winc> <binc> <movetime> <depth> <movestogo>]   start search\n";    
-                    std::cout << "  go perft                                                perft test\n";
-                    std::cout << "  stop                                                    stop search\n";
-                    std::cout << "  quit                                                    quit engine\n";
-                    std::cout.flush();
-                }
+                //else if (cmd == "help") {
+                //    std::cout << "Simple chess engine by motya\n";
+                //    std::cout << "Commands:\n";
+                //    std::cout << "  uci                                                     go uci mode\n";
+                //    std::cout << "  isready\n                                               check if engine is ready\n";
+                //    std::cout << "  setoption name <name> value <value>\n";
+                //    std::cout << "  ucinewgame\n                                            create new game";
+                //    std::cout << "  position <startpos | fen <fenstring>> moves <moves>     sets position \n";
+                //    std::cout << "  go [<wtime> <btime> <winc> <binc> <movetime> <depth> <movestogo>]   start search\n";    
+                //    std::cout << "  go perft                                                perft test\n";
+                //    std::cout << "  stop                                                    stop search\n";
+                //    std::cout << "  quit                                                    quit engine\n";
+                //    std::cout << "  debug [on | off]                                        turn debug on or off\n";
+                //    std::cout << "  debug [on | off]                                        turn debug on or off\n";
+                //    std::cout.flush();
+                //}
                 else if (cmd == "debug") {
                     std::cin >> cmd;
                     if (cmd == "on") {
@@ -2543,7 +2547,7 @@ namespace ChessEngine
                     if (search_thread.joinable()) search_thread.join();
                     return;
                 }
-                else if (cmd == "uci") {
+                else if (cmd == "uci" || cmd == "UCI") {
                     std::cout << "id name SCE++\n";
                     std::cout << "id author motya\n";
                     std::cout << "option name Hash type spin default 1000000 min 1 max " << max_hash_size << "\n";
@@ -2576,6 +2580,11 @@ namespace ChessEngine
                         clear_hash_table();
                     }
                     else if (cmd == "OwnBook") {
+                        std::cin >> cmd;
+                        if (cmd!="value") {
+                            std::cout << "Unknown command(:\n";
+                            continue;
+                        }
                         std::cin >> cmd;
                         if (cmd == "true") engine.use_book = true;
                         else engine.use_book = false;
@@ -2775,6 +2784,7 @@ inline void debug_search(SearchEngine& engine) {
 int main() {
     #define SetBoardFen(ss) if (!engine.board.SetFen((ss))) {std::cout << "Invalid fen\n";return 0; }
     //todo:
+    // follow pv after null move prunning?
     // add queen table
     // add bishop, queen mobility
     // check passed pawn eval black
