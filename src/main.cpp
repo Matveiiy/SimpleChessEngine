@@ -1429,6 +1429,7 @@ namespace ChessEngine
         static constexpr int ReductionLimit = 3;
         static constexpr int ReductionFactor = ReductionLimit - 1;
         static constexpr int WindowMargin = 50;
+	bool do_null_move = true;
         bool use_book = false, follow_pv;
         int ply=0;
         Board board;
@@ -1643,7 +1644,8 @@ namespace ChessEngine
                     if (static_eval - eval_margin >= beta) return static_eval - eval_margin;
                 }
                 //null move prunning
-                if (depth>=3 && ply) {
+                if (do_null_move && depth>=3 && ply) {
+		    do_null_move=false;
                     const auto saved_pv = follow_pv;
                     //const auto saved_key = board.current_key;
                     board.move_count++;ply++;repetition_table[++repetition_index] = board.current_key;
@@ -1667,7 +1669,7 @@ namespace ChessEngine
                     board.move_count--;
                     board.current_key^=board.side_key;
                     follow_pv = saved_pv;
-                    
+		    do_null_move=true;
                     if (UCI::stopped) return 0;
                     if constexpr (HasTime) {if (get_time_ms() > stoptime) {UCI::stopped = true;return 0;}}
                     if (score >= beta) {
