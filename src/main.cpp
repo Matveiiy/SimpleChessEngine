@@ -10,6 +10,7 @@
 #include <atomic>
 #include <thread>
 #include <sstream>
+#include <unordered_map>
 #ifdef WIN64
     #include <windows.h>
 #else
@@ -399,7 +400,7 @@ namespace ChessEngine
                 if (castle&1) fen+='k';
                 if (castle&2) fen+='q';
             }
-            fen += " - 0 1";
+            fen += " - ";
             return fen;
         }
         inline void UpdateOccupancy() {cur_all = bboard[1] | bboard[2] | bboard[3] | bboard[4] | bboard[5] | bboard[6] | bboard[12] | bboard[11] | bboard[10] | bboard[9] | bboard[8] | bboard[7];}
@@ -1436,7 +1437,7 @@ namespace ChessEngine
         int nodes = 0;
         int stoptime;
         bool look_at_book = true;
-        std::ifstream book;
+        std::unordered_multimap<std::string, std::string> book_moves;
         template<bool IsWhite> uint64_t perft(int depth) {
             if (depth == 0) return 1;
             uint64_t nodes = 0;
@@ -1470,6 +1471,27 @@ namespace ChessEngine
                 board.UndoMove<IsWhite>(moves.move_storage[i]);
             }
             std::cout << "Total: " << nodes << '\n';
+        }void init_book(std::string path) {
+            std::ifstream book;
+            book.open(path);
+            if (book.fail() || !book.is_open()) {
+                use_book = false;
+                book_moves.clear();
+                std::cout << "Book not found!" << std::endl;
+                return;
+            }
+            int curLine = 0;
+            std::string line = "";
+            std::string move_str = board.GetFen();
+            move_str = move_str.substr(0, move_str.size()-4);
+            while(getline(book, line)) {
+                curLine++;
+                const std::string fen = line.substr(0, line.find('=')-4);
+                const std::string move_data = line.substr(line.find("=>")+3);
+                std::vector<std::string> data;
+                split(move_data, ' ', data);
+                for (int i = 0; i < data.size(); ++i) {book_moves.insert({fen, data[i]});}
+            }
         }
         template <bool IsWhite, bool HasTime>
         void go_position(int depth, int endtime = 0, bool very_fast = false) {
@@ -1481,36 +1503,27 @@ namespace ChessEngine
             memset(history, 0, sizeof history);
             memset(pv_table, 0, sizeof pv_table);
             memset(pv_length, 0, sizeof pv_length);
-            Move last_best = NullMove;
+            #ifndef TEST_RELEASE
             if (use_book && look_at_book) {
-                unsigned int curLine = 0;
-                std::string line = "";
-                book.clear();
-                book.seekg(0, std::ios::beg);
-                std::string move_str = board.GetFen();
-                move_str = move_str.substr(0, move_str.size()-4);
-                while(getline(book, line)) {
-                    curLine++;
-                    //break;
-                    //std::cout << "here\n"
-                    if (line.find(move_str) == 0) {
-                        std::string move_data = line.substr(line.find("=>")+3);
-                        std::vector<std::string> data;
-                        split(move_data, ' ', data);
-                        //for (int i = 0; i < data.size(); ++i) std::cout << data[i] << '\n';
-                        if (UCI::uci_debug) std::cout << "info string found move in own book(" << curLine << ")\n";
-                        srand(time(NULL));
-                        std::cout << "bestmove " << data[rand()%data.size()] << '\n';
-                        std::cout.flush();
-                        UCI::stopped = true;
-                        return;
-                        //std::cout << "info "
-                        //std::cout << "found: " << move_str << "line: " << curLine << std::endl;
-                        
+                auto range = book_moves.equal_range(board.GetFen());
+                const int rsize = std::distance(range.first, range.second);
+                int k = 0;
+                srand(time(NULL));
+                if (rsize) {
+                    const int el = rand()%rsize;
+                    for (auto i = range.first; i != range.second; ++i, ++k) {
+                        if (k == el) {
+                            if (UCI::uci_debug) std::cout << "info string book move\n";
+                            std::cout << "bestmove " << i->second << '\n';
+                            std::cout.flush();
+                            UCI::stopped = true;
+                            return;
+                        }
                     }
                 }
-                look_at_book = false;
+                look_at_book=false;
             }
+            #endif
             for (int i = 1; i <= depth; ++i) {
                 follow_pv = true;
                 //std::cout << "info depth " << i << '\n';
@@ -1531,7 +1544,6 @@ namespace ChessEngine
                 alpha= score - WindowMargin;
                 beta = score + WindowMargin;
                 if (pv_length[0]) {
-                    last_best = pv_table[0][0];
                     if (score == EVAL_MATE) std::cout << "info depth " << i << " nodes " << nodes << " score mate 100 pv ";
                     else if (score == -EVAL_MATE) std::cout << "info depth " << i << " nodes " << nodes << " score mate -100 pv ";
                     else std::cout << "info depth " << i << " nodes " << nodes << " score cp " << score << " pv ";
@@ -1545,7 +1557,7 @@ namespace ChessEngine
                 std::cout.flush();
             }
 
-            std::cout << "bestmove " << move_to_string(last_best) << '\n';
+            std::cout << "bestmove " << move_to_string(pv_table[0][0]) << '\n';
             std::cout.flush();
             UCI::stopped = true;
         }
@@ -1562,7 +1574,7 @@ namespace ChessEngine
         }
         int find_best(MoveList& moves, Move best, int pos) {
             if (!best) return 0;
-            for (int i = 0; i < moves.count; ++i) {
+            for (int i = pos; i < moves.count; ++i) {
                 if (moves.move_storage[i] == best) {
                     std::swap(moves.move_storage[pos], moves.move_storage[i]);
                     return 1;
@@ -1631,18 +1643,10 @@ namespace ChessEngine
             if (ply && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH && !pv_node) return score;
             if (depth == 0) return quiet_search<IsWhite, HasTime>(alpha, beta);
             if (ply > MAX_PLY-1) return Evaluate<IsWhite>();
-            //best = NullMove;
             ++nodes;
             bool in_check = board.IsKingInCheck<IsWhite>();
             if (in_check) depth++;
             else {
-                int static_eval = 0;
-                //int static_eval = Evaluate<IsWhite>();
-                //static eval prunning
-                if (false && depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
-                    int eval_margin = 120 * depth;
-                    if (static_eval - eval_margin >= beta) return static_eval - eval_margin;
-                }
                 //null move prunning
                 if (do_null_move && depth>=3 && ply) {
 		            do_null_move=false;
@@ -1676,22 +1680,34 @@ namespace ChessEngine
                         return beta;
                     }
                 }
-                //razoring
-                if (false && !pv_node && depth <= 3) {
-                    score = static_eval + 125;
-                    int new_score;
-                    if (score < beta) {
-                        if (depth == 1) {
-                            new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
-                            return (new_score > score) ? new_score : score;
-                        }
-                        score += 175;
-                        if (score < beta && depth <= 2) {
-                            new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
-                            if (new_score < beta) return (new_score > score) ? new_score : score;
+                //---------IN TESTING...--------------
+                //futility prunning
+                if (depth <= 3) { 
+                    int static_eval = Evaluate<IsWhite>();
+                    if (false && depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
+                        int eval_margin = 120 * depth;
+                        if (static_eval - eval_margin >= beta) return beta;
+                        if (static_eval + eval_margin < alpha) return alpha;
+                    }
+                    //razoring
+                    if (false && !pv_node && depth <= 3) {
+                        score = static_eval + 125;
+                        int new_score;
+                        if (score < beta) {
+                            if (depth == 1) {
+                                new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
+                                return (new_score > score) ? new_score : score;
+                            }
+                            score += 175;
+                            if (score < beta && depth <= 2) {
+                                new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
+                                if (new_score < beta) return (new_score > score) ? new_score : score;
+                            }
                         }
                     }
                 }
+                //---------IN TESTING...--------------
+               
             }
             int hashf = HASHF_ALPHA;
             int temp_move_count = 0;
@@ -1772,11 +1788,7 @@ namespace ChessEngine
         }
         void Init() {
             board.InitBoard();
-            book.open("simple.book");
-            if (book.fail()) {
-                std::cout << "Warning! Book not found!\n";
-                use_book = false;
-            }
+            init_book("simple.book");
         }
     public:
     #ifndef USE_NNUE
@@ -2366,7 +2378,7 @@ namespace ChessEngine
                     ss >> cmd;
                     if (cmd == "startpos") {
                         engine.board.SetFen(startpos);
-                        last_was_startpos = true;
+                        engine.look_at_book = true;
                     }
                     else if (cmd == "fen") {
                         ss >> cmd;
