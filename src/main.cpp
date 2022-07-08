@@ -1562,7 +1562,8 @@ namespace ChessEngine
             UCI::stopped = true;
         }
         int score_move(const Move& move) {
-            if (GetMoveCapture(move))  return mvv_lva[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)board.piece_board[(int)GetMoveTo(move)]-1] + 10000;
+            if (GetMoveCapture(move)) return mvv_lva[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)board.piece_board[(int)GetMoveTo(move)]-1] + 10000 + ((GetMoveType(move) == MoveType::PROMOTION) ? promotion_score[(int)GetMoveParam(move)] : 0);
+            if (GetMoveType(move) == MoveType::PROMOTION) return promotion_score[(int)GetMoveParam(move)];
             if (killers[0][ply] == move) return 9000;
             if (killers[1][ply] == move) return 8000;
             return history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)];
@@ -2265,6 +2266,7 @@ namespace ChessEngine
     
     #endif
     public:
+        static constexpr int promotion_score[13] = {0, 0, -20000, -40000, -30000, 1000, 0, 0, -20000, -40000, -30000, 1000, 0};
         static constexpr int mvv_lva[12][12] = {
             105, 205, 305, 405, 505, 605,  105, 205, 305, 405, 505, 605,
             104, 204, 304, 404, 504, 604,  104, 204, 304, 404, 504, 604,
