@@ -1433,6 +1433,7 @@ namespace ChessEngine
         static constexpr int VeryLateMove = 12;
         static constexpr int WindowMargin = 50;
         static constexpr int FutilityMargin = 100;
+        static constexpr int AlphaMargin[4] = {0, 300, 520, 900};
         //maybe internal iterative deepening like in  fruit
         static const int IIDepth = 3;
 	    bool do_null_move = true;
@@ -2287,7 +2288,7 @@ namespace ChessEngine
     
     #endif
     public:
-        static constexpr int promotion_score[13] = {0, 0, -20000, -40000, -30000, 1000, 0, 0, -20000, -40000, -30000, 1000, 0};
+        static constexpr int promotion_score[13] = {0, 0, -20000, -40000, -30000, 10000, 0, 0, -20000, -40000, -30000, 10000, 0};
         static constexpr int mvv_lva[12][12] = {
             105, 205, 305, 405, 505, 605,  105, 205, 305, 405, 505, 605,
             104, 204, 304, 404, 504, 604,  104, 204, 304, 404, 504, 604,
