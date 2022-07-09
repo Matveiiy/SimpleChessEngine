@@ -1429,7 +1429,12 @@ namespace ChessEngine
         static constexpr int FullDepthMoves = 4;
         static constexpr int ReductionLimit = 3;
         static constexpr int ReductionFactor = ReductionLimit - 1;
+        static constexpr int VeryLatePly = 3;
+        static constexpr int VeryLateMove = 12;
         static constexpr int WindowMargin = 50;
+        static constexpr int FutilityMargin = 100;
+        //maybe internal iterative deepening like in  fruit
+        static const int IIDepth = 3;
 	    bool do_null_move = true;
         bool use_book = false, follow_pv;
         int ply=0;
@@ -1574,7 +1579,6 @@ namespace ChessEngine
             });
         }
         int find_best(MoveList& moves, Move best, int pos) {
-            if (!best) return 0;
             for (int i = pos; i < moves.count; ++i) {
                 if (moves.move_storage[i] == best) {
                     std::swap(moves.move_storage[pos], moves.move_storage[i]);
@@ -1584,7 +1588,6 @@ namespace ChessEngine
             return 0;
         }
         int enable_pvs(MoveList& moves) {
-            if (!follow_pv) return 0;
             follow_pv = false;
             for (int i = 0; i < moves.count; ++i) {
                 if (pv_table[0][ply] == moves.move_storage[i]) {
@@ -1596,6 +1599,17 @@ namespace ChessEngine
             }
             return 0;
         }
+        void QuickSort(int l, int r, std::vector<int>& scores, MoveList& moves) {
+            for (int i = 0; i < scores.size(); i++) {
+                for (int j = i + 1; j < scores.size(); ++j) {
+                    if (scores[i] < scores[j]) {
+                        std::swap(scores[i], scores[j]);
+                        std::swap(moves.move_storage[i], moves.move_storage[j]);
+                    }
+                }
+            }
+        }
+
         template<bool IsWhite, bool HasTime>
         int quiet_search(int alpha, int beta) {
             nodes++;
@@ -1644,7 +1658,6 @@ namespace ChessEngine
             if (ply && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH && !pv_node) return score;
             if (depth == 0) return quiet_search<IsWhite, HasTime>(alpha, beta);
             if (ply > MAX_PLY-1) return Evaluate<IsWhite>();
-            ++nodes;
             bool in_check = board.IsKingInCheck<IsWhite>();
             if (in_check) depth++;
             else {
@@ -1682,16 +1695,15 @@ namespace ChessEngine
                     }
                 }
                 //---------IN TESTING...--------------
-                //futility prunning
                 if (depth <= 3) { 
+                    //reverse futility prunning
                     int static_eval = Evaluate<IsWhite>();
-                    if (false && depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
+                    if (depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
                         int eval_margin = 120 * depth;
                         if (static_eval - eval_margin >= beta) return beta;
-                        if (static_eval + eval_margin < alpha) return alpha;
                     }
                     //razoring
-                    if (false && !pv_node && depth <= 3) {
+                    if (!pv_node && depth <= 3) {
                         score = static_eval + 125;
                         int new_score;
                         if (score < beta) {
@@ -1714,25 +1726,34 @@ namespace ChessEngine
             int temp_move_count = 0;
             MoveList moves;
             board.GenMovesUnchecked<IsWhite>(moves);
-            
             int temp_pos=0;
-            temp_pos += enable_pvs(moves);
-            temp_pos += find_best(moves, best, temp_pos);
+            if (follow_pv) temp_pos = enable_pvs(moves);
+            if (best) temp_pos += find_best(moves, best, temp_pos);
             sort_moves(moves, temp_pos);
+            
+            //for (int i = 1; i < moves.count; ++i) {assert(scores[i-1] <= scores[i]);}
             for (int i = 0; i < moves.count; ++i) {
+            //for (int i = moves.count-1; i >= 0; --i) {
                 auto move = moves.move_storage[i];
                 board.MakeMove<IsWhite>(move);
                 if (board.IsKingInCheck<IsWhite>()) {board.UndoMove<IsWhite>(move);continue;}
                 ++ply;repetition_table[++repetition_index] = board.current_key;
                 if (!temp_move_count) score = -negamax<!IsWhite, HasTime>(depth-1, -beta, -alpha);
-                //Late move reduction
                 else {
-                    if (temp_move_count >= FullDepthMoves &&
-                     depth >= ReductionLimit && 
-                     (!in_check) &&
-                      (!GetMoveCapture(move)) && 
-                      (GetMoveType(move) != MoveType::PROMOTION)) 
-                        score = -negamax<!IsWhite, HasTime>(depth-ReductionFactor, -alpha -1, -alpha);
+                    if ((!in_check) &&
+                    (!GetMoveCapture(move)) && 
+                    (GetMoveType(move) != MoveType::PROMOTION)) {
+                        //futility prunning
+                        if (depth == 1 && !pv_node && Evaluate<IsWhite>() + FutilityMargin <= alpha) {
+                            board.UndoMove<IsWhite>(move);
+                            --ply;--repetition_index;
+                            continue;
+                        }
+                        //Late move reduction
+                        if (depth > ReductionLimit && temp_move_count >= VeryLateMove && ply) score = -negamax<!IsWhite, HasTime>(depth-ReductionLimit, -alpha -1, -alpha);
+                        else if (temp_move_count >= FullDepthMoves && depth >= ReductionLimit) score = -negamax<!IsWhite, HasTime>(depth-ReductionFactor, -alpha -1, -alpha);
+                        else score = alpha+1;
+                    }
                     else score = alpha+1;
                     if (score > alpha) {
                         //search trying to proove that other moves are not better
@@ -2551,9 +2572,11 @@ namespace ChessEngine
                         int new_hash_size = std::stoi(cmd);
                         if (hash_size > max_hash_size) hash_size = max_hash_size;
                         if (hash_size < 1) hash_size = 1;
+                        #ifndef TEST_RELEASE
                         hash_size=new_hash_size;
                         delete[] hash_table;
                         hash_table = new tagHASH[hash_size];
+                        #endif
                         clear_hash_table();
                     }
                     else if (cmd == "OwnBook") {
@@ -2771,14 +2794,9 @@ int main() {
     //  change endgame phase score
     //  quiescene: custom score move(for captures only)
     //  bug when discarded by aspiration window
-    //  * loosing pv after aspiration window
     //  * SEE
-    //  * futility prunning
     //  * probcut
     //  * rank cut
-    //  * razoring
-    //  * check null move en passant
-    //  * ChessEngine::UCI => timing, ponder, searchmoves
     //  evaluation
     //  hashing: transposition/zobrist table
     //  move bishop&rook attacks to constexpr or consteval or constinit
@@ -2812,7 +2830,29 @@ int main() {
         engine.board.SetFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         //engine.go_position<true, false>(1);
         //return 0;
-        std::cout << engine.Evaluate<true>() << '\n';
+        MoveList moves;
+        engine.board.GenMovesUnchecked<true>(moves);
+        int temp_pos=0;
+        temp_pos += engine.enable_pvs(moves);
+        temp_pos += engine.find_best(moves, NullMove, temp_pos);
+        engine.sort_moves(moves, temp_pos);
+        for (int i = 0; i < moves.count; ++i) {
+            std::cout << move_to_string(moves.move_storage[i]) << ' ' << engine.score_move(moves.move_storage[i]) << '\n';
+        }
+        std::cout << "------------------------------------------\n";
+        moves.count = 0;
+        engine.board.GenMovesUnchecked<true>(moves);
+        std::vector< std::pair<int, Move> > scores(moves.count);
+        for (int i = 0; i < moves.count; ++i) {
+            if (engine.follow_pv) if (moves.move_storage[i] == engine.pv_table[0][engine.ply]) scores[i].first = 2000000;
+            else if (moves.move_storage[i] == NullMove) scores[i].first = 1000000;
+            else scores[i].first = engine.score_move(moves.move_storage[i]);
+            scores[i].second = moves.move_storage[i];
+        }
+        //engine.QuickSort(moves.count-1, 0, scores, moves);
+        for (int i = 0; i < moves.count; ++i) {
+            std::cout << move_to_string(scores[i].second) << ' ' << scores[i].first << '\n';
+        }
         //if (engine.board.IsWhiteToMove()) std::cout << engine.Evaluate<true>() << '\n';
         //else std::cout << engine.Evaluate<false>() << '\n';
         //debug_search<false, true>(engine);
