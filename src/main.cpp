@@ -1662,6 +1662,32 @@ namespace ChessEngine
             bool in_check = board.IsKingInCheck<IsWhite>();
             if (in_check) depth++;
             else {
+                //---------IN TESTING...--------------
+                if (depth <= 3) { 
+                    //reverse futility prunning
+                    int static_eval = Evaluate<IsWhite>();
+                    if (depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
+                        int eval_margin = 120 * depth;
+                        if (static_eval - eval_margin >= beta) return beta;
+                    }
+                    //razoring
+                    if (!pv_node && depth <= 3) {
+                        score = static_eval + 125;
+                        int new_score;
+                        if (score < beta) {
+                            if (depth == 1) {
+                                new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
+                                return (new_score > score) ? new_score : score;
+                            }
+                            score += 175;
+                            if (score < beta && depth <= 2) {
+                                new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
+                                if (new_score < beta) return (new_score > score) ? new_score : score;
+                            }
+                        }
+                    }
+                }
+                //---------IN TESTING...--------------
                 //null move prunning
                 if (do_null_move && depth>=3 && ply) {
 		            do_null_move=false;
@@ -1695,32 +1721,7 @@ namespace ChessEngine
                         return beta;
                     }
                 }
-                //---------IN TESTING...--------------
-                if (depth <= 3) { 
-                    //reverse futility prunning
-                    int static_eval = Evaluate<IsWhite>();
-                    if (depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
-                        int eval_margin = 120 * depth;
-                        if (static_eval - eval_margin >= beta) return beta;
-                    }
-                    //razoring
-                    if (!pv_node && depth <= 3) {
-                        score = static_eval + 125;
-                        int new_score;
-                        if (score < beta) {
-                            if (depth == 1) {
-                                new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
-                                return (new_score > score) ? new_score : score;
-                            }
-                            score += 175;
-                            if (score < beta && depth <= 2) {
-                                new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
-                                if (new_score < beta) return (new_score > score) ? new_score : score;
-                            }
-                        }
-                    }
-                }
-                //---------IN TESTING...--------------
+                
                
             }
             int hashf = HASHF_ALPHA;
