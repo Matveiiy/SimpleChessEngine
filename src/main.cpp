@@ -1426,14 +1426,13 @@ namespace ChessEngine
         static constexpr int DRAW_TUNE = 1;
         static constexpr int EVAL_MATE = 32000;
         static constexpr int EVAL_INFINITY = 33000;
+        static constexpr int VeryLateMove = 12;
+        static constexpr int VeryLatePly = 3;
         static constexpr int FullDepthMoves = 4;
         static constexpr int ReductionLimit = 3;
         static constexpr int ReductionFactor = ReductionLimit - 1;
-        static constexpr int VeryLatePly = 3;
-        static constexpr int VeryLateMove = 12;
         static constexpr int WindowMargin = 50;
         static constexpr int FutilityMargin = 100;
-        static constexpr int AlphaMargin[4] = {0, 300, 520, 900};
         //maybe internal iterative deepening like in  fruit
         static const int IIDepth = 3;
 	    bool do_null_move = true;
@@ -1611,7 +1610,7 @@ namespace ChessEngine
             }
         }
 
-        template<bool IsWhite, bool HasTime>
+        template<bool IsWhite, bool HasTime, bool Eval=false>
         int quiet_search(int alpha, int beta) {
             nodes++;
             if (is_repetition(board.current_key)) return EVAL_DRAW+DRAW_TUNE;
@@ -1663,29 +1662,11 @@ namespace ChessEngine
             if (in_check) depth++;
             else {
                 //---------IN TESTING...--------------
-                if (depth <= 3) { 
-                    //reverse futility prunning
-                    int static_eval = Evaluate<IsWhite>();
-                    if (depth < 3 && !pv_node && abs(beta-1) > -EVAL_INFINITY + 100) {
-                        int eval_margin = 120 * depth;
-                        if (static_eval - eval_margin >= beta) return beta;
-                    }
-                    //razoring
-                    if (!pv_node && depth <= 3) {
-                        score = static_eval + 125;
-                        int new_score;
-                        if (score < beta) {
-                            if (depth == 1) {
-                                new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
-                                return (new_score > score) ? new_score : score;
-                            }
-                            score += 175;
-                            if (score < beta && depth <= 2) {
-                                new_score = quiet_search<IsWhite, HasTime>(alpha, beta);
-                                if (new_score < beta) return (new_score > score) ? new_score : score;
-                            }
-                        }
-                    }
+                if (depth < 3 && !pv_node) { 
+                    //reverse futility prunning 
+                    const int static_eval = Evaluate<IsWhite>();
+                    const int eval_margin = 120 * depth;
+                    if (static_eval - eval_margin >= beta) return beta;
                 }
                 //---------IN TESTING...--------------
                 //null move prunning
@@ -1741,6 +1722,8 @@ namespace ChessEngine
                 if (board.IsKingInCheck<IsWhite>()) {board.UndoMove<IsWhite>(move);continue;}
                 ++ply;repetition_table[++repetition_index] = board.current_key;
                 if (!temp_move_count) score = -negamax<!IsWhite, HasTime>(depth-1, -beta, -alpha);
+                //boring move check
+                
                 else {
                     if ((!in_check) &&
                     (!GetMoveCapture(move)) && 
