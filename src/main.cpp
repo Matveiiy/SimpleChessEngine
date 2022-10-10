@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <thread>
+#include <cmath>
 #include <sstream>
 #include <unordered_map>
 #ifdef WIN64
@@ -1426,16 +1427,18 @@ namespace ChessEngine
         static constexpr int DRAW_TUNE = 1;
         static constexpr int EVAL_MATE = 32000;
         static constexpr int EVAL_INFINITY = 33000;
-        static constexpr int VeryLateMove = 12;
+        static constexpr int VeryLateMove = 13;
         static constexpr int VeryLatePly = 3;
         static constexpr int FullDepthMoves = 4;
         static constexpr int ReductionLimit = 3;
         static constexpr int ReductionFactor = ReductionLimit - 1;
         static constexpr int WindowMargin = 50;
         static constexpr int FutilityMargin = 100;
+	    static constexpr bool do_null_move = true;
+        static constexpr bool UseReverseFutilityPruning = true;
+        static constexpr bool UseRazoring = false;
         //maybe internal iterative deepening like in  fruit
         static const int IIDepth = 3;
-	    bool do_null_move = true;
         bool use_book = false, follow_pv;
         int ply=0;
         Board board;
@@ -1661,17 +1664,24 @@ namespace ChessEngine
             bool in_check = board.IsKingInCheck<IsWhite>();
             if (in_check) depth++;
             else {
-                //---------IN TESTING...--------------
-                if (depth < 3 && !pv_node) { 
-                    //reverse futility prunning 
+                if (depth < 3 && !pv_node && !in_check) {
+                    //Maybe quiet search here for more stability???
                     const int static_eval = Evaluate<IsWhite>();
-                    const int eval_margin = 120 * depth;
-                    if (static_eval - eval_margin >= beta) return beta;
+                    if (UseReverseFutilityPruning) { 
+
+                        //reverse futility prunning 
+                        const int eval_margin = 120 * depth;
+                        const auto prun = static_eval - eval_margin;
+                        if (prun >= beta) return prun;
+                    }
+                    if (UseRazoring) {
+                        //razoring 
+                        if (depth == 1) if (static_eval + 125 < alpha) return alpha;
+                        else if (static_eval + 320 < alpha) return alpha;
+                    }
                 }
-                //---------IN TESTING...--------------
                 //null move prunning
                 if (do_null_move && depth>=3 && ply) {
-		            do_null_move=false;
                     const auto saved_pv = follow_pv;
                     //const auto saved_key = board.current_key;
                     board.move_count++;ply++;repetition_table[++repetition_index] = board.current_key;
@@ -1695,7 +1705,7 @@ namespace ChessEngine
                     board.move_count--;
                     board.current_key^=board.side_key;
                     follow_pv = saved_pv;
-		            do_null_move=true;
+		            //do_null_move=true;
                     if (UCI::stopped) return 0;
                     if constexpr (HasTime) {if (get_time_ms() > stoptime) {UCI::stopped = true;return 0;}}
                     if (score >= beta) {
@@ -1725,20 +1735,23 @@ namespace ChessEngine
                 //boring move check
                 
                 else {
-                    if ((!in_check) &&
+                    const auto red = lmred[depth][temp_move_count]; 
+                    //Late move reduction(LMR)
+                    if (temp_move_count >= FullDepthMoves 
+                    && depth > red + 1 
+                    && !in_check && 
+                    !GetMoveCapture(move) && 
+                    (GetMoveType(move) != MoveType::PROMOTION))
+                        score = -negamax<!IsWhite, HasTime>(depth - 1 - red, -alpha-1, -alpha);
+                    /*
+                    if (ply && (!in_check) &&
                     (!GetMoveCapture(move)) && 
                     (GetMoveType(move) != MoveType::PROMOTION)) {
-                        //futility prunning
-                        if (depth == 1 && !pv_node && Evaluate<IsWhite>() + FutilityMargin <= alpha) {
-                            board.UndoMove<IsWhite>(move);
-                            --ply;--repetition_index;
-                            continue;
-                        }
-                        //Late move reduction
-                        if (depth > ReductionLimit && temp_move_count >= VeryLateMove && ply) score = -negamax<!IsWhite, HasTime>(depth-ReductionLimit, -alpha -1, -alpha);
-                        else if (temp_move_count >= FullDepthMoves && depth >= ReductionLimit) score = -negamax<!IsWhite, HasTime>(depth-ReductionFactor, -alpha -1, -alpha);
+                        if (depth > ReductionLimit && temp_move_count > FullDepthMoves) score = -negamax<!IsWhite, HasTime>(depth-ReductionLimit, -alpha -1, -alpha);
+                        //if (depth > ReductionLimit && temp_move_count >= VeryLateMove) score = -negamax<!IsWhite, HasTime>(depth-ReductionLimit, -alpha -1, -alpha);
+                        //else if (temp_move_count >= FullDepthMoves && depth >= ReductionLimit) score = -negamax<!IsWhite, HasTime>(depth-ReductionFactor, -alpha -1, -alpha);
                         else score = alpha+1;
-                    }
+                    }*/
                     else score = alpha+1;
                     if (score > alpha) {
                         //search trying to proove that other moves are not better
@@ -1794,6 +1807,11 @@ namespace ChessEngine
             return alpha;
         }
         void Init() {
+            for (int d = 1; d < 32; d++) {
+                for (int l = 1; l < 64; l++) {
+                    lmred[d][l] = int(std::log2(l) * std::log2(d) * 0.4);
+                }
+            }
             board.InitBoard();
             init_book("simple.book");
         }
@@ -2292,6 +2310,7 @@ namespace ChessEngine
         Move history[12][64] = {};
         int pv_table[MAX_PLY][MAX_PLY];
         int pv_length[MAX_PLY];
+        int lmred[MAX_PLY][256];
     };
     
     namespace UCI{
