@@ -1430,8 +1430,6 @@ namespace ChessEngine
         static constexpr int VeryLateMove = 13;
         static constexpr int VeryLatePly = 3;
         static constexpr int FullDepthMoves = 4;
-        static constexpr int ReductionLimit = 3;
-        static constexpr int ReductionFactor = ReductionLimit - 1;
         static constexpr int WindowMargin = 50;
         static constexpr int FutilityMargin = 100;
 	    static constexpr bool do_null_move = true;
@@ -1552,8 +1550,10 @@ namespace ChessEngine
                 alpha= score - WindowMargin;
                 beta = score + WindowMargin;
                 if (pv_length[0]) {
-                    if (score == EVAL_MATE) std::cout << "info depth " << i << " nodes " << nodes << " score mate 100 pv ";
-                    else if (score == -EVAL_MATE) std::cout << "info depth " << i << " nodes " << nodes << " score mate -100 pv ";
+                    if (abs(abs(score) - EVAL_MATE) < MAX_PLY) {
+                        if (score < 0) std::cout << "info depth " << i << " nodes " << nodes << " score mate " << (-score - EVAL_MATE - 1) / 2 << " pv ";
+                        else std::cout << "info depth " << i << " nodes " << nodes << " score mate " << (EVAL_MATE - score + 1) / 2 << " pv ";
+                    }
                     else std::cout << "info depth " << i << " nodes " << nodes << " score cp " << score << " pv ";
                     for (int i = 0; i < pv_length[0]; ++i) {
                         std::cout << move_to_string(pv_table[0][i]) << ' ';
@@ -1651,6 +1651,9 @@ namespace ChessEngine
             //std::cout << spaces << "In Fen: " << board.GetFen() << " static eval: " << Evaluate<IsWhite>() << '\n';
             return alpha;
         }
+        inline static constexpr bool is_move_interesting(const Move& move, const bool& in_check) {
+            return in_check || GetMoveCapture(move) || (GetMoveType(move) == MoveType::PROMOTION);
+        }
         template <bool IsWhite, bool HasTime>
         int negamax(int depth, int alpha, int beta) {
             pv_length[ply] = ply;
@@ -1659,7 +1662,7 @@ namespace ChessEngine
             if (ply && is_repetition(board.current_key)) return EVAL_DRAW+DRAW_TUNE;
             bool pv_node = beta-alpha > 1;
             if (ply && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH && !pv_node) return score;
-            if (depth == 0) return quiet_search<IsWhite, HasTime>(alpha, beta);
+            if (depth <= 0) return quiet_search<IsWhite, HasTime>(alpha, beta);
             if (ply > MAX_PLY-1) return Evaluate<IsWhite>();
             bool in_check = board.IsKingInCheck<IsWhite>();
             if (in_check) depth++;
@@ -1675,9 +1678,9 @@ namespace ChessEngine
                         if (prun >= beta) return prun;
                     }
                     if (UseRazoring) {
-                        //razoring 
+                        //----EXPERIMENTAL!!!----- 
                         if (depth == 1) if (static_eval + 125 < alpha) return alpha;
-                        else if (static_eval + 320 < alpha) return alpha;
+                        else if (static_eval + 326 < alpha) return alpha;
                     }
                 }
                 //null move prunning
@@ -1735,14 +1738,14 @@ namespace ChessEngine
                 //boring move check
                 
                 else {
-                    const auto red = lmred[depth][temp_move_count]; 
+                    int red = 0;
                     //Late move reduction(LMR)
                     if (temp_move_count >= FullDepthMoves 
-                    && depth > red + 1 
-                    && !in_check && 
-                    !GetMoveCapture(move) && 
-                    (GetMoveType(move) != MoveType::PROMOTION))
-                        score = -negamax<!IsWhite, HasTime>(depth - 1 - red, -alpha-1, -alpha);
+                    && depth >= 3 && !is_move_interesting(move, in_check)) {
+                        red = lmred[depth][std::min(63, temp_move_count)]; 
+                        if (pv_node) score = -negamax<!IsWhite, HasTime>(depth - 1 - red/2, -alpha-1, -alpha);
+                        else score = -negamax<!IsWhite, HasTime>(depth - 1 - red, -alpha-1, -alpha);
+                    }
                     /*
                     if (ply && (!in_check) &&
                     (!GetMoveCapture(move)) && 
@@ -1754,8 +1757,14 @@ namespace ChessEngine
                     }*/
                     else score = alpha+1;
                     if (score > alpha) {
-                        //search trying to proove that other moves are not better
                         score = -negamax<!IsWhite, HasTime>(depth - 1, -alpha-1, -alpha);
+                        /*if (red == 0) {
+                            red = temp_move_count/12 + temp_move_count/16;
+                            score = -negamax<!IsWhite, HasTime>(depth - 1 - red, -alpha-1, -alpha);
+                            if (red != 0 && score > alpha) score = -negamax<!IsWhite, HasTime>(depth - 1, -alpha-1, -alpha);
+                        }
+                        else score = -negamax<!IsWhite, HasTime>(depth - 1, -alpha-1, -alpha);*/
+                        //search trying to proove that other moves are not better
                         //if we found a better move
                         if ((score > alpha) && (score < beta)) 
                             //research normally
@@ -1799,7 +1808,7 @@ namespace ChessEngine
             }
             if (temp_move_count == 0) {
                 if (board.IsKingInCheck<IsWhite>()) {
-                    return -EVAL_MATE;
+                    return -EVAL_MATE + ply;
                 }
                 return EVAL_DRAW+DRAW_TUNE;
             }
@@ -1807,9 +1816,10 @@ namespace ChessEngine
             return alpha;
         }
         void Init() {
-            for (int d = 1; d < 32; d++) {
+            for (int d = 3; d < 32; d++) {
                 for (int l = 1; l < 64; l++) {
-                    lmred[d][l] = int(std::log2(l) * std::log2(d) * 0.4);
+                    lmred[d][l] = int(std::log2(l) * std::log2(d) * 0.4);//0.4 idealy
+                    if (lmred[d][l] > d-2) lmred[d][l] = d-2;
                 }
             }
             board.InitBoard();
@@ -2310,7 +2320,7 @@ namespace ChessEngine
         Move history[12][64] = {};
         int pv_table[MAX_PLY][MAX_PLY];
         int pv_length[MAX_PLY];
-        int lmred[MAX_PLY][256];
+        int lmred[MAX_PLY][64];
     };
     
     namespace UCI{
