@@ -1816,6 +1816,15 @@ namespace ChessEngine
             return alpha;
         }
         void Init() {
+            for (int i = 0; i < 64; ++i) {
+                for (int j = 0; j < 64; ++j) {
+                    int row_i = i / 8;
+                    int file_i = i % 8;
+                    int row_j = j / 8;
+                    int file_j = j % 8;
+                    square_proximity[i][j] = 7 - std::max(std::abs(file_i - file_j), std::abs(row_i - row_j));
+                }
+            }
             for (int d = 3; d < 32; d++) {
                 for (int l = 1; l < 64; l++) {
                     lmred[d][l] = int(std::log2(l) * std::log2(d) * 0.4);//0.4 idealy
@@ -1826,83 +1835,9 @@ namespace ChessEngine
             init_book("simple.book");
         }
     public:
-    #ifndef USE_NNUE
-    #if 0
-    //  TSCP eval
-        #define KINGS_PAWN_MOVED_ONE_PENALTY    10
-        #define KINGS_PAWN_MOVED_TWO_PENALTY    20
-        #define NO_KINGS_PAWN_PENALTY           25
-        #define SEMI_OPEN_FILE_ON_KING_PENALTY  15
-        #define ENEMY_PAWNSTORM_ON_FOURTH       5
-        #define ENEMY_PAWNSTORM_ON_THIRD        10
-        #define MATERIAL_FOR_KING_ATTACK_FACTOR 3100
-        #define DOUBLE_PAWN_PENALTY             10
-        #define OPEN_LINE_NEAR_KING_PENALTY	    10
-        #define ENDGAME_PHASE		            1200
-        #define ISOLATED_PAWN_PENALTY		    20
-        #define BACKWARDS_PAWN_PENALTY		    8
-        #define PASSED_PAWN_BONUS			    20
-        #define ROOK_SEMI_OPEN_FILE_BONUS	    10
-        #define ROOK_OPEN_FILE_BONUS		    15
-        #define ROOK_ON_SEVENTH_BONUS		    20
-
-
-        static constexpr int piece_value[13] = {
-            0, 100, 300, 302, 500, 900, 0, 100, 300, 302, 500, 900, 0
-        };
-        static constexpr int pawn_pcsq[64] = {
-            0,   0,   0,   0,   0,   0,   0,   0,
-            0,   0,   0, -40, -40,   0,   0,   0,
-            1,   2,   3, -10, -10,   3,   2,   1,
-            2,   4,   6,   8,   8,   6,   4,   2,
-            3,   6,   9,  12,  12,   9,   6,   3,
-            4,   8,  12,  16,  16,  12,   8,   4,
-            5,  10,  15,  20,  20,  15,  10,   5,
-            0,   0,   0,   0,   0,   0,   0,   0
-        };
-        static constexpr int knight_pcsq[64] = {
-            -10, -10, -10, -10, -10, -10, -10, -10,
-            -10,   0,   0,   0,   0,   0,   0, -10,
-            -10,   0,   5,   5,   5,   5,   0, -10,
-            -10,   0,   5,  10,  10,   5,   0, -10,
-            -10,   0,   5,  10,  10,   5,   0, -10,
-            -10,   0,   5,   5,   5,   5,   0, -10,
-            -10,   0,   0,   0,   0,   0,   0, -10,
-            -10, -30, -10, -10, -10, -10, -30, -10
-        };
-        static constexpr int bishop_pcsq[64] = {
-            -10, -10, -10, -10, -10, -10, -10, -10,
-            -10,   0,   0,   0,   0,   0,   0, -10,
-            -10,   0,   5,   5,   5,   5,   0, -10,
-            -10,   0,   5,  10,  10,   5,   0, -10,
-            -10,   0,   5,  10,  10,   5,   0, -10,
-            -10,   0,   5,   5,   5,   5,   0, -10,
-            -10,   0,   0,   0,   0,   0,   0, -10,
-            -10, -10, -20, -10, -10, -20, -10, -10
-        };
-
-        static constexpr int king_pcsq[64] = {
-            0,  20,  40, -20,   0, -20,  40,  20
-            -20, -20, -20, -20, -20, -20, -20, -20,
-            -40, -40, -40, -40, -40, -40, -40, -40,
-            -40, -40, -40, -40, -40, -40, -40, -40,
-            -40, -40, -40, -40, -40, -40, -40, -40,
-            -40, -40, -40, -40, -40, -40, -40, -40,
-            -40, -40, -40, -40, -40, -40, -40, -40,
-            -40, -40, -40, -40, -40, -40, -40, -40,
-        };
-
-        static constexpr int king_endgame_pcsq[64] = {
-            0,  10,  20,  30,  30,  20,  10,   0,
-            10,  20,  30,  40,  40,  30,  20,  10,
-            20,  30,  40,  50,  50,  40,  30,  20,
-            30,  40,  50,  60,  60,  50,  40,  30,
-            30,  40,  50,  60,  60,  50,  40,  30,
-            20,  30,  40,  50,  50,  40,  30,  20,
-            10,  20,  30,  40,  40,  30,  20,  10,
-            0,  10,  20,  30,  30,  20,  10,   0
-        };
-        int flip[64] = {
+    #define VICE_EXPERIMENTAL
+    #if defined(GUNBORG_EVAL)
+        static constexpr int flip[64] = {
             56,  57,  58,  59,  60,  61,  62,  63,
             48,  49,  50,  51,  52,  53,  54,  55,
             40,  41,  42,  43,  44,  45,  46,  47,
@@ -1912,198 +1847,448 @@ namespace ChessEngine
             8,   9,  10,  11,  12,  13,  14,  15,
             0,   1,   2,   3,   4,   5,   6,   7
         };
+        const int DOUBLED_PAWN_PENALTY = 10;//originally 14, now 10
+        const int ISOLATED_PAWN_PENALTY = 9;
+        const int BACKWARD_PAWN_PENALTY = 7;
         
-        inline int eval_light_king(int sq, int& bpiece_mat)
-        {
-            int r;  /* the value to return */
-            int i;
+        const int PASSED_PAWN_BONUS[8] = { 0, 5, 10, 20, 35, 60, 100, 200 };//const int PASSED_PAWN_BONUS = 38;
+        const int OPEN_FILE_BONUS = 10;
+        const int SEMI_OPEN_FILE_BONUS = 5;
+        const int UNSAFE_KING_PENALTY = 9;
+        const int BISHOP_PAIR_BONUS = 44;
+        const int BISHOP_MOBILITY_BONUS = 2;
+        const int ROOK_MOBILITY_BONUS = 4;
+        const int KNIGHT_KING_PROXIMITY_BONUS = 6;
+        const int ROOK_KING_PROXIMITY_BONUS = 4;
+        const int QUEEN_KING_PROXIMITY_BONUS = 11;
+        const int BISHOP_KING_PROXIMITY_BONUS = 0;
+        const int MAX_MATERIAL = 3100;
 
-            r = king_pcsq[sq];
-            const int column = sq % 8;
+        const int PIECE_VALUES[7] = {100, 300, 300, 500, 900, 10000, 100};
 
-            /* if the king is castled, use a special function to evaluate the
-            pawns on the appropriate side */
-            if (column < 3) {
-                r += eval_lkp(0);
-                r += eval_lkp(1);
-                r += eval_lkp(2) / 2;  /* problems with pawns on the c & f files
-                                        are not as severe */
-            }
-            else if (column > 4) {
-                r += eval_lkp(7);
-                r += eval_lkp(6);
-                r += eval_lkp(5) / 2;
-            }
+        // the value of a white pawn at all squares from white's perspective
+        const int PAWN_SQUARE_TABLE[64] = {
+                // A1
+                100, 100, 100, 100, 100, 100, 100, 100, // H1
+                100, 100, 100, 95, 95, 100, 100, 100,
+                101, 103, 104, 98, 98, 104, 103, 101,
+                102, 105, 106, 111, 111, 106, 105, 102,
+                103, 107, 109, 111, 111, 109, 107, 103,
+                105, 109, 111, 111, 111, 111, 109, 105,
+                107, 111, 113, 113,	113, 113, 111, 107,
+        /*A8*/100, 100, 100, 100, 100, 100, 100, 100 // H8
+                };
 
-            /* otherwise, just assess a penalty if there are open files near
-            the king */
-            else {
-                if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMask(column))) r -= OPEN_LINE_NEAR_KING_PENALTY;
-                if (column != 7 && !((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMask(column + 1))) r -= OPEN_LINE_NEAR_KING_PENALTY;
-                if (column != 0 && !((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMask(column - 1))) r -= OPEN_LINE_NEAR_KING_PENALTY;
-            }
+        const int PAWN_SQUARE_TABLE_ENDGAME[64] = {
+                // A1
+                100, 100, 100, 100, 100, 100, 100, 100, // H1
+                100, 100, 100, 100, 100, 100, 100, 100,
+                105, 105, 105, 105, 105, 105, 105, 105,
+                111, 111, 111, 111, 111, 111, 111, 111,
+                130, 130, 130, 130, 130, 130, 130, 130,
+                170, 170, 170, 170, 170, 170, 170, 170,
+                220, 220, 220, 220, 220, 220, 220, 220,
+        /*A8*/100, 100, 100, 100, 100, 100, 100, 100 // H8
+                };
 
-            /* scale the king safety value according to the opponent's material;
-            the premise is that your king safety can only be bad if the
-            opponent has enough pieces to attack you */
-            r *= bpiece_mat;
-            r /= MATERIAL_FOR_KING_ATTACK_FACTOR;
-            return r;
-        }
+        const int KNIGHT_SQUARE_TABLE[64] = {
+                290, 295, 295, 295, 295, 295, 295, 290,
+                295, 300, 300, 300, 300, 300, 300, 295,
+                295, 300, 305, 307, 307, 305, 300, 295,
+                295, 300, 309, 310, 310, 309, 300, 295,
+                295, 300, 309, 310, 310, 309, 300, 295,
+                295, 300, 305, 307, 307, 305, 300, 295,
+                295, 300, 300, 300, 300, 300, 300, 295,
+                290, 295, 295, 295, 295, 295, 295, 290, };
 
-        /* eval_lkp(f) evaluates the Light King Pawn on file f */
+        const int BISHOP_SQUARE_TABLE[64] = {
+                275, 295, 295, 295, 295, 295, 295, 275,
+                295, 300, 300, 300, 300, 300, 300, 295,
+                295, 300, 308, 306, 306, 308, 300, 295,
+                295, 300, 310, 309, 309, 310, 300, 295,
+                295, 300, 311, 310, 310, 311, 300, 295,
+                295, 300, 312, 312, 312, 312, 300, 295,
+                295, 305, 314, 315, 315, 314, 305, 295,
+                295, 305, 305, 309, 309, 305, 305, 295, };
 
-        inline int eval_lkp(int f)
-        {
-            int r = 0;
-            if (board.piece_board[f+8] == ColorPiece::WP);
-            else if (board.piece_board[f+16] == ColorPiece::WP) r -= KINGS_PAWN_MOVED_ONE_PENALTY;
-            else if (board.piece_board[f+24] == ColorPiece::WP) r -= KINGS_PAWN_MOVED_TWO_PENALTY;
-            else r-= NO_KINGS_PAWN_PENALTY;
+        const int ROOK_SQUARE_TABLE[64] = {
+                // A1
+                495, 500, 500, 510, 510, 500, 500, 495,
+                500, 500, 500, 500, 500, 500, 500, 500,
+                500, 500, 500, 500, 500, 500, 500, 500,
+                500, 500, 500, 500, 500, 500, 500, 500,
+                500, 500, 500, 500, 500, 500, 500, 500,
+                500, 500, 500, 500, 500, 500, 500, 500,
+                515, 515, 515, 515, 515, 515, 515, 515,
+                495, 500, 500, 500, 500, 500, 500, 495, }; //H8
 
-            if (board.piece_board[f+24] == ColorPiece::BP) r -= ENEMY_PAWNSTORM_ON_FOURTH;
-            else if (board.piece_board[f+16] == ColorPiece::BP) r -= ENEMY_PAWNSTORM_ON_THIRD;
-            else if (!(board.bboard[(int)ColorPiece::BP] & Board::GetFileMask(f))) r -= SEMI_OPEN_FILE_ON_KING_PENALTY;
+        const int QUEEN_SQUARE_TABLE[64] {
+                895, 895, 895, 895, 895, 895, 895, 895,
+                895, 900, 900, 900, 900, 900, 900, 895,
+                895, 900, 900, 900, 900, 900, 900, 895,
+                895, 900, 900, 905, 905, 900, 900, 895,
+                895, 900, 900, 905, 905, 900, 900, 895,
+                895, 900, 900, 900, 900, 900, 900, 895,
+                895, 900, 900, 900, 900, 900, 900, 895,
+                895, 895, 895, 895, 895, 895, 895, 895,
+        };
 
-            return r;
-        }
-        inline int eval_dark_king(int sq, int& wpiece_mat)
-        {
-            int r;
-            int i;
-            
-            r = king_pcsq[flip[sq]];
-            const int column = sq % 8;
-            if (column < 3) {
-                r += eval_dkp(0);
-                r += eval_dkp(1);
-                r += eval_dkp(2) / 2;
-            }
-            else if (column > 4) {
-                r += eval_dkp(7);
-                r += eval_dkp(6);
-                r += eval_dkp(5) / 2;
-            }
-            else {
-                if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMask(column))) r -= OPEN_LINE_NEAR_KING_PENALTY;
-                if (column != 7 && !((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMask(column + 1))) r -= OPEN_LINE_NEAR_KING_PENALTY;
-                if (column != 0 && !((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMask(column - 1))) r -= OPEN_LINE_NEAR_KING_PENALTY;
+        const int KING_SQUARE_TABLE[64] {
+                // A1
+                10000, 10010, 10020, 9990, 9995, 9990, 10020, 10000,
+                10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
+                10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
+                10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
+                10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
+                10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
+                10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
+                10000, 10010, 10020, 9990, 9995, 9990, 10020, 10000, // H8
+        };
 
-            }
-            r *= wpiece_mat;
-            r /= MATERIAL_FOR_KING_ATTACK_FACTOR;
-            return r;
-        }
-
-        inline int eval_dkp(int f)
-        {
-            int r = 0;
-            if (board.piece_board[f+48] == ColorPiece::BP);
-            else if (board.piece_board[f+40] == ColorPiece::BP) r -= KINGS_PAWN_MOVED_ONE_PENALTY;
-            else if (board.piece_board[f+32] == ColorPiece::BP) r -= KINGS_PAWN_MOVED_TWO_PENALTY;
-            else r-= NO_KINGS_PAWN_PENALTY;
-
-            if (board.piece_board[f+32] == ColorPiece::WP) r -= ENEMY_PAWNSTORM_ON_FOURTH;
-            else if (board.piece_board[f+40] == ColorPiece::WP) r -= ENEMY_PAWNSTORM_ON_THIRD;
-            else if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMask(f))) r -= SEMI_OPEN_FILE_ON_KING_PENALTY;
-
-            return r;
-        }
+        const int KING_SQUARE_TABLE_ENDGAME[64] = {
+                9980, 9990, 9990, 9990, 9990, 9990, 9990, 9980,
+                9990, 9995, 9995, 9995, 9995, 9995, 9995, 9990,
+                9995, 10000, 10000, 10005, 10005, 10000, 10000, 9995,
+                9995, 10005, 10005, 10010, 10010, 10005, 10005, 9995,
+                9995, 10005, 10005, 10010, 10010, 10005, 10005, 9995,
+                9995, 10000, 10000, 10005, 10005, 10000, 10000, 9995,
+                9990, 9995, 9995, 9995, 9995, 9995, 9995, 9990,
+                9980, 9990, 9990, 9990, 9990, 9990, 9990, 9980
+        };
         template<bool IsWhite>
-        int Evaluate() {
-            //king eval doesn't work
-            int wbishops = 0, bbishops = 0;
-            int wpiece_material = 0, bpiece_material = 0;
-            int wpawn_material = 0, bpawn_material = 0;
-            int wscore = 0, bscore = 0;
-            int score_opening = 0, score_endgame = 0;
-            bitboard bb;
-            bb = board.bboard[(int)ColorPiece::WP];
-            while (bb) {
-                const int square = bit_scan_forward(bb);reset_lsb(bb);
-                wpawn_material += piece_value[(int)ColorPiece::WP];
-                wscore += pawn_pcsq[square];
+    int Evaluate() {
+        //add queen as open and semi open file piece??????
+        board.UpdateOccupanciesColors<IsWhite>();
+        int score = 0;
+        int op_score = 0, eg_score = 0;
+	    int black_king_proximity_bonus = 0;
+        int white_king_proximity_bonus = 0;
+        int bishop_count = 0;
 
-                const int double_pawns = count_bits(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(square));
-                if (double_pawns > 1) wscore -= DOUBLE_PAWN_PENALTY;
-
-                if (!(board.bboard[(int)ColorPiece::WP] & Board::GetIsolatedMaskSquare(square))) wscore-=ISOLATED_PAWN_PENALTY;
-                if (!(board.bboard[(int)ColorPiece::BP] & Board::GetPassedMaskSquare<true>(square))) wscore+=(square/8) * PASSED_PAWN_BONUS;
-            }  
-            bb = board.bboard[(int)ColorPiece::BP];
-            while (bb) {
-                const int square = bit_scan_forward(bb);reset_lsb(bb);
-                bpawn_material += piece_value[(int)ColorPiece::BP];
-                bscore += pawn_pcsq[flip[square]];
-
-                const int double_pawns = count_bits(board.bboard[(int)ColorPiece::BP] & Board::GetFileMaskSquare(square));
-                if (double_pawns > 1) bscore -= DOUBLE_PAWN_PENALTY;
-                if (!(board.bboard[(int)ColorPiece::BP] & Board::GetIsolatedMaskSquare(square))) bscore-=ISOLATED_PAWN_PENALTY;
-                if (!(board.bboard[(int)ColorPiece::WP] & Board::GetPassedMaskSquare<false>(square))) bscore+=(flip[square]/8) * PASSED_PAWN_BONUS;
-            }
-            //std::cout << wscore << ' ' << bscore << std::endl;
-            bb = board.bboard[(int)ColorPiece::WN];
-            while (bb) {
-                const int square = bit_scan_forward(bb);reset_lsb(bb);
-                wpiece_material += piece_value[(int)ColorPiece::WN];
-                wscore += knight_pcsq[square];
-            }
-            bb = board.bboard[(int)ColorPiece::BN];
-            while (bb) {
-                const int square = bit_scan_forward(bb);reset_lsb(bb);
-                bpiece_material += piece_value[(int)ColorPiece::BN];
-                bscore += knight_pcsq[flip[square]];
-            }
-            //std::cout << wscore << ' ' << bscore << std::endl;
-            bb = board.bboard[(int)ColorPiece::WB];
-            while (bb) {
-                const int square = bit_scan_forward(bb);reset_lsb(bb);
-                wpiece_material += piece_value[(int)ColorPiece::WB];
-                wscore += bishop_pcsq[square];
-                wbishops++;
-            }
-            bb = board.bboard[(int)ColorPiece::BB];
-            while (bb) {
-                const int square = bit_scan_forward(bb);reset_lsb(bb);
-                bpiece_material += piece_value[(int)ColorPiece::BB];
-                bscore += bishop_pcsq[flip[square]];
-                bbishops++;
-            }
-            //std::cout << wscore << ' ' << bscore << std::endl;
-            bb = board.bboard[(int)ColorPiece::WR];
-            while (bb) {
-                const int square = bit_scan_forward(bb);reset_lsb(bb);
-                wpiece_material += piece_value[(int)ColorPiece::WR];
-                if (square/8 == 6) wscore+=ROOK_ON_SEVENTH_BONUS;
-                if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(square))) wscore+=ROOK_SEMI_OPEN_FILE_BONUS;
-                if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(square))) wscore+=ROOK_OPEN_FILE_BONUS;
-            }
-            bb = board.bboard[(int)ColorPiece::BR];
-            while (bb) {
-                const int square = bit_scan_forward(bb);reset_lsb(bb);
-                bpiece_material += piece_value[(int)ColorPiece::BR];
-                if (square/8 == 1) bscore+=ROOK_ON_SEVENTH_BONUS;
-                if (!(board.bboard[(int)ColorPiece::BP] & Board::GetFileMaskSquare(square))) bscore+=ROOK_SEMI_OPEN_FILE_BONUS;
-                if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(square))) bscore+=ROOK_OPEN_FILE_BONUS;
-            }
-            wpiece_material+=count_bits(board.bboard[(int)ColorPiece::WQ])*piece_value[(int)ColorPiece::WQ];
-            bpiece_material+=count_bits(board.bboard[(int)ColorPiece::BQ])*piece_value[(int)ColorPiece::BQ];
-            //std::cout << wscore << ' ' << bscore << std::endl;
-            //------------------------------------------------------
-            const int wking = bit_scan_forward(board.bboard[(int)ColorPiece::WK]);
-            const int bking = bit_scan_forward(board.bboard[(int)ColorPiece::BK]);
-            if (bpiece_material <= ENDGAME_PHASE) wscore += king_endgame_pcsq[wking];
-            else wscore += eval_light_king(wking, bpiece_material);
-            if (wpiece_material <= ENDGAME_PHASE) bscore += king_endgame_pcsq[flip[bking]];
-			else bscore += eval_dark_king(bking, wpiece_material);
-            //std::cout << wscore << ' ' << bscore << std::endl;
-            //std::cout << wpiece_material << ' ' << bpiece_material << std::endl;
-            //std::cout << wpawn_material << ' ' << bpawn_material << std::endl;
-            if constexpr (IsWhite) return wscore + wpiece_material + wpawn_material - bpiece_material - bpawn_material - bscore;
-            else return bscore + bpiece_material + bpawn_material - wpiece_material - wpawn_material - wscore;
-            //if constexpr (IsWhite) return wscore + wpiece_material + wpawn_material - bscore - bpiece_material - bpawn_material;
-            //else return bscore + bpiece_material + bpawn_material - wscore - wpiece_material - wpawn_material;
+        const int black_king = bit_scan_forward(board.bboard[(int)ColorPiece::BK]);
+        const int white_king = bit_scan_forward(board.bboard[(int)ColorPiece::WK]);
+        const int WRC = count_bits(board.bboard[(int)ColorPiece::WR]);
+        const int BRC = count_bits(board.bboard[(int)ColorPiece::BR]);
+        const int BQC = count_bits(board.bboard[(int)ColorPiece::BQ]);
+        const int WQC = count_bits(board.bboard[(int)ColorPiece::WQ]);
+        const int BNC = count_bits(board.bboard[(int)ColorPiece::BN]);
+        const int WNC = count_bits(board.bboard[(int)ColorPiece::WN]);
+        const int WBC = count_bits(board.bboard[(int)ColorPiece::WB]);
+        const int BBC = count_bits(board.bboard[(int)ColorPiece::BB]);
+        const int white_piece_material =  WQC * 900 + WRC * 500 + WBC * 300 + WNC * 300;
+        const int black_piece_material =  BQC * 900 + BRC * 500 + BBC * 300 + BNC * 300;
+        const int total_material = white_piece_material + black_piece_material;
+        if (total_material <= 300 && (board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) == 0) return 0;
+        bitboard bb;
+        bb = board.bboard[(int)ColorPiece::WP];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            op_score += PAWN_SQUARE_TABLE[sq];
+            eg_score += PAWN_SQUARE_TABLE_ENDGAME[sq];
+            const auto doubled_pawns = count_bits(board.bboard[(int)ColorPiece::WP]&Board::GetFileMaskSquare(sq));
+            if (doubled_pawns > 1) score-=DOUBLED_PAWN_PENALTY;
+            if (!(board.bboard[(int)ColorPiece::BP] & Board::GetPassedMaskSquare<true>(sq))) score+=PASSED_PAWN_BONUS[sq/8];
+            if (!(board.bboard[(int)ColorPiece::WP] & Board::GetIsolatedMaskSquare(sq))) score-=ISOLATED_PAWN_PENALTY;
         }
+        //std::cout << score << ' ' << op_score << ' ' << eg_score << '\n';
+        bb = board.bboard[(int)ColorPiece::BP];
+        while (bb) {
+            const auto sq = flip[bit_scan_forward(bb)];reset_lsb(bb);
+            op_score -= PAWN_SQUARE_TABLE[sq];
+            eg_score -= PAWN_SQUARE_TABLE_ENDGAME[sq];
+            const auto doubled_pawns = count_bits(board.bboard[(int)ColorPiece::BP]&Board::GetFileMaskSquare(sq));
+            if (doubled_pawns > 1) score+=DOUBLED_PAWN_PENALTY;
+            if (!(board.bboard[(int)ColorPiece::WP] & Board::GetPassedMaskSquare<false>(flip[sq]))) score-=PASSED_PAWN_BONUS[sq/8];
+            if (!(board.bboard[(int)ColorPiece::BP] & Board::GetIsolatedMaskSquare(sq))) score+=ISOLATED_PAWN_PENALTY;
+        }
+        //std::cout << score << ' ' << op_score << ' ' << eg_score << '\n';
+        bb = board.bboard[(int)ColorPiece::WB];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            score+=BISHOP_SQUARE_TABLE[sq];
+            score += BISHOP_MOBILITY_BONUS * (count_bits(Board::BishopAttacks(sq, board.cur_all) & board.not_own) - 5);
+            black_king_proximity_bonus += square_proximity[black_king][sq] * BISHOP_KING_PROXIMITY_BONUS;
+            bishop_count++;
+        }
+        if (bishop_count==2) score += BISHOP_PAIR_BONUS;
+        bishop_count=0;
+        bb = board.bboard[(int)ColorPiece::BB];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            score-=BISHOP_SQUARE_TABLE[flip[sq]];
+            score -= BISHOP_MOBILITY_BONUS * (count_bits(Board::BishopAttacks(sq, board.cur_all) & board.not_own) - 5);
+            white_king_proximity_bonus += square_proximity[white_king][sq] * BISHOP_KING_PROXIMITY_BONUS;
+            bishop_count++;
+        }
+        if (bishop_count==2) score -= BISHOP_PAIR_BONUS;
+        
+        bb = board.bboard[(int)ColorPiece::WN];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            score+=KNIGHT_SQUARE_TABLE[sq];
+            black_king_proximity_bonus += square_proximity[black_king][sq] * KNIGHT_KING_PROXIMITY_BONUS;
+        }
+        bb = board.bboard[(int)ColorPiece::BN];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            score-=KNIGHT_SQUARE_TABLE[flip[sq]];
+            white_king_proximity_bonus += square_proximity[white_king][sq] * KNIGHT_KING_PROXIMITY_BONUS;
+        }
+        bb = board.bboard[(int)ColorPiece::WR];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            score+=ROOK_SQUARE_TABLE[sq];
+            score += ROOK_MOBILITY_BONUS * (count_bits(Board::RookAttacks(sq, board.cur_all) & board.not_own) - 5);
+            black_king_proximity_bonus += square_proximity[black_king][sq] * ROOK_KING_PROXIMITY_BONUS;
+            if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(sq))) score+=OPEN_FILE_BONUS;
+            else if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(sq))) score+=SEMI_OPEN_FILE_BONUS;
+        }
+        bb = board.bboard[(int)ColorPiece::BR];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            score-=ROOK_SQUARE_TABLE[flip[sq]];
+            score -= ROOK_MOBILITY_BONUS * (count_bits(Board::RookAttacks(sq, board.cur_all) & board.not_own) - 5);
+            white_king_proximity_bonus += square_proximity[white_king][sq] * ROOK_KING_PROXIMITY_BONUS;
+            if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(sq))) score-=OPEN_FILE_BONUS;
+            else if (!(board.bboard[(int)ColorPiece::BP] & Board::GetFileMaskSquare(sq))) score-=SEMI_OPEN_FILE_BONUS;
+        }
+        bb = board.bboard[(int)ColorPiece::WQ];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            score+=QUEEN_SQUARE_TABLE[sq];
+            black_king_proximity_bonus += square_proximity[black_king][sq] * QUEEN_KING_PROXIMITY_BONUS;
+            if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(sq))) score+=OPEN_FILE_BONUS;
+            else if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(sq))) score+=SEMI_OPEN_FILE_BONUS;
+        }
+        bb = board.bboard[(int)ColorPiece::BQ];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            score-=QUEEN_SQUARE_TABLE[flip[sq]];
+            white_king_proximity_bonus += square_proximity[white_king][sq] * QUEEN_KING_PROXIMITY_BONUS;
+            if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(sq))) score-=OPEN_FILE_BONUS;
+            else if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(sq))) score-=SEMI_OPEN_FILE_BONUS;
+        }
+        eg_score+=KING_SQUARE_TABLE_ENDGAME[white_king];
+        op_score+=KING_SQUARE_TABLE[white_king];
+        eg_score-=KING_SQUARE_TABLE_ENDGAME[flip[black_king]];
+        op_score-=KING_SQUARE_TABLE[flip[black_king]];
+        int white_king_safety = 0;
+        int black_king_safety = 0;
+        //add open filed around the king
+        //add pawns in front of the king
+        // add no pawns on the two squares in front of the king
+        white_king_safety*=black_piece_material;
+        black_king_proximity_bonus*=white_piece_material;
+        black_king_safety*=white_piece_material;
+        white_king_proximity_bonus*=black_piece_material;
+
+        score += (black_king_proximity_bonus - white_king_proximity_bonus + black_king_safety - white_king_safety - eg_score * total_material + op_score * total_material)/MAX_MATERIAL;
+	    score += eg_score;
+
+        //std::cout << score << ' ' << board.GetFen() << '\n';
+        if constexpr (IsWhite) return score;
+        return -score;
+    }
+    #elif defined(VICE_EXPERIMENTAL) 
+    //VICE evaluation
+    static constexpr int PieceVal[13] = { 0, 100, 325, 325, 550, 1000, 50000, 100, 325, 325, 550, 1000, 50000 };
+    static constexpr int PawnIsolated = 10;
+    static constexpr int PawnDoubled = 6;
+    static constexpr int PawnPassed[8] = { 0, 5, 10, 20, 35, 60, 100, 200 };
+    static constexpr int RookOpenFile = 10;
+    static constexpr int RookSemiOpenFile = 5;
+    static constexpr int QueenOpenFile = 5;
+    static constexpr int QueenSemiOpenFile = 3;
+    static constexpr int BishopPair = 30;
+    static constexpr int BishopMobility = 2;
+    static constexpr int KnightMobility = 2;
+    static constexpr int RookMobility = 4;
+
+    const int PawnTable[64] = {
+        0,	0,	0,	0,	0,	0,	0,	0,
+        10,	10,	0,	-10,-10,0,	10,	10,
+        5,	0,	0,	5,	5,	0,	0,	5,
+        0,	0,	10,	20,	20,	10,	0,	0,
+        5,	5,	5,	10,	10,	5,	5,	5,
+        10,	10,	10,	20,	20,	10,	10,	10,
+        20,	20,	20,	30,	30,	20,	20,	20,
+        0,	0,	0,	0,	0,	0,	0,	0
+    };
+
+    const int KnightTable[64] = {
+        0,	-10,0,	0,	0,	0,	-10,0,
+        0,	0,	0,	5,	5,	0,	0,	0,
+        0,	0,	10,	10,	10,	10,	0,	0,
+        0,	5,	10,	20,	20,	10,	5,	0,
+        5,	10,	15,	20,	20,	15,	10,	5,
+        5,	10,	10,	20,	20,	10,	10,	5,
+        0,	0,	5,	10,	10,	5,	0,	0,
+        0,	0,	0,	0,	0,	0,	0,	0
+    };
+
+    const int BishopTable[64] = {
+        0,	0,	-10,0,	0,	-10,0,	0,
+        0,	0,	0,	10,	10,	0,	0,	0,
+        0,	0,	10,	15,	15,	10,	0,	0,
+        0,	10,	15,	20,	20,	15,	10,	0,
+        0,	10,	15,	20,	20,	15,	10,	0,
+        0,	0,	10,	15,	15,	10,	0,	0,
+        0,	0,	0,	10,	10,	0,	0,	0,
+        0,	0,	0,	0,	0,	0,	0,	0
+    };
+
+    const int RookTable[64] = {
+        0,	0,	5,	10,	10,	5,	0,	0,
+        0,	0,	5,	10,	10,	5,	0,	0,
+        0,	0,	5,	10,	10,	5,	0,	0,
+        0,	0,	5,	10,	10,	5,	0,	0,
+        0,	0,	5,	10,	10,	5,	0,	0,
+        0,	0,	5,	10,	10,	5,	0,	0,
+        25,	25,	25,	25,	25,	25,	25,	25,
+        0,	0,	5,	10,	10,	5,	0,	0
+    };
+
+    const int KingE[64] = {
+        -50,-10,0,	0,	0,	0,	-10,-50,
+        -10,0,	10,	10,	10,	10,	0,	-10,
+        0,	10,	15,	15,	15,	15,	10,	0,
+        0,	10,	15,	20,	20,	15,	10,	0,
+        0,	10,	15,	20,	20,	15,	10,	0,
+        0,	10,	15,	15,	15,	15,	10,	0,
+        -10,0,	10,	10,	10,	10,	0,	-10,
+        -50,-10,0,	0,	0,	0,	-10,-50
+    };
+
+    const int KingO[64] = {
+        0,	5,	5,	-10,-10,0,	10,	5,
+        -30,-30,-30,-30,-30,-30,-30,-30,
+        -50,-50,-50,-50,-50,-50,-50,-50,
+        -70,-70,-70,-70,-70,-70,-70,-70,
+        -70,-70,-70,-70,-70,-70,-70,-70,
+        -70,-70,-70,-70,-70,-70,-70,-70,
+        -70,-70,-70,-70,-70,-70,-70,-70,
+        -70,-70,-70,-70,-70,-70,-70,-70	
+    };
+    static constexpr int flip[64] = {
+        56,  57,  58,  59,  60,  61,  62,  63,
+        48,  49,  50,  51,  52,  53,  54,  55,
+        40,  41,  42,  43,  44,  45,  46,  47,
+        32,  33,  34,  35,  36,  37,  38,  39,
+        24,  25,  26,  27,  28,  29,  30,  31,
+        16,  17,  18,  19,  20,  21,  22,  23,
+        8,   9,  10,  11,  12,  13,  14,  15,
+        0,   1,   2,   3,   4,   5,   6,   7
+    };
+
+    #define ENDGAME_MAT (PieceVal[(int)ColorPiece::WR] + 2 * PieceVal[(int)ColorPiece::WN] + 2 * PieceVal[(int)ColorPiece::WP])
+    #define START_MAT (PieceVal[(int)ColorPiece::WR] * 2 + PieceVal[(int)ColorPiece::WN] * 2 + PieceVal[(int)ColorPiece::WB] * 2 + PieceVal[(int)ColorPiece::WQ] + PieceVal[(int)ColorPiece::WP] * 8)
+    template<bool IsWhite>
+    int Evaluate() {
+        const auto whitebb = board.bboard[1] | board.bboard[2] | board.bboard[3] | board.bboard[4] | board.bboard[5] | board.bboard[6];
+        const auto blackbb = board.bboard[7] | board.bboard[8] | board.bboard[9] | board.bboard[10] | board.bboard[11] | board.bboard[12];
+        int score = 0;
+        int wbishops = 0, bbishops = 0;
+        int bmaterial = 0, wmaterial = 0;
+        //todo: test passed pawns
+        //pos->material[WHITE] - pos->material[BLACK];
+        bitboard bb;
+        bb = board.bboard[(int)ColorPiece::WP];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            wmaterial+=PieceVal[(int)ColorPiece::WP];
+            score+=PawnTable[sq];
+            const int doubled_pawns = count_bits(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(sq));
+            score-=int(doubled_pawns>1) * PawnDoubled;
+            if (!(board.bboard[(int)ColorPiece::BP] & Board::GetPassedMaskSquare<true>(sq))) score+=PawnPassed[sq/8];
+            if (!(board.bboard[(int)ColorPiece::WP] & Board::GetIsolatedMaskSquare(sq))) score-=PawnIsolated;
+        }
+        bb = board.bboard[(int)ColorPiece::BP];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            bmaterial+=PieceVal[(int)ColorPiece::BP];
+            score-=PawnTable[flip[sq]];
+            const int doubled_pawns = count_bits(board.bboard[(int)ColorPiece::BP] & Board::GetFileMaskSquare(sq));
+            score+=int(doubled_pawns>1) * PawnDoubled;
+            if (!(board.bboard[(int)ColorPiece::WP] & Board::GetPassedMaskSquare<false>(sq))) score-=PawnPassed[flip[sq]/8];
+            if (!(board.bboard[(int)ColorPiece::BP] & Board::GetIsolatedMaskSquare(sq))) score+=PawnIsolated;
+        }
+        bb = board.bboard[(int)ColorPiece::WN];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            wmaterial+=PieceVal[(int)ColorPiece::WN];
+            score+=KnightTable[sq];
+            score+=KnightMobility * (count_bits(Board::KnightAttacks(sq) & ~board.cur_all) - 3);
+        }
+        bb = board.bboard[(int)ColorPiece::BN];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            bmaterial+=PieceVal[(int)ColorPiece::BN];
+            score-=KnightTable[flip[sq]];
+            score-=KnightMobility * (count_bits(Board::KnightAttacks(sq) & ~board.cur_all) - 3);
+        }
+        bb = board.bboard[(int)ColorPiece::WB];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            wmaterial+=PieceVal[(int)ColorPiece::WB];
+            score+=BishopTable[sq];
+            score += BishopMobility * (count_bits(Board::BishopAttacks(sq, board.cur_all) & ~whitebb) - 5);
+            wbishops++;
+        }
+        bb = board.bboard[(int)ColorPiece::BB];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            bmaterial+=PieceVal[(int)ColorPiece::BB];
+            score-=BishopTable[flip[sq]];
+            score -= BishopMobility * (count_bits(Board::BishopAttacks(sq, board.cur_all) & ~blackbb) - 5);
+            bbishops++;
+        }
+        bb = board.bboard[(int)ColorPiece::WR];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            wmaterial+=PieceVal[(int)ColorPiece::WR];
+            score+=RookTable[sq];
+            score += RookMobility * (count_bits(Board::RookAttacks(sq, board.cur_all) & ~whitebb) - 5);
+            if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(sq))) score+=RookOpenFile;
+            else if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(sq))) score+=RookSemiOpenFile;
+        }
+        bb = board.bboard[(int)ColorPiece::BR];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            bmaterial+=PieceVal[(int)ColorPiece::BR];
+            score-=RookTable[flip[sq]];
+            score -= RookMobility * (count_bits(Board::RookAttacks(sq, board.cur_all) & ~blackbb) - 5);
+            if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(sq))) score-=RookOpenFile;
+            else if (!(board.bboard[(int)ColorPiece::BP] & Board::GetFileMaskSquare(sq))) score-=RookSemiOpenFile;
+        }
+        bb = board.bboard[(int)ColorPiece::WQ];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            wmaterial+=PieceVal[(int)ColorPiece::WQ];
+            if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(sq))) score+=QueenOpenFile;
+            else if (!(board.bboard[(int)ColorPiece::WP] & Board::GetFileMaskSquare(sq))) score+=QueenSemiOpenFile;
+        }
+        bb = board.bboard[(int)ColorPiece::BQ];
+        while (bb) {
+            const auto sq = bit_scan_forward(bb);reset_lsb(bb);
+            bmaterial+=PieceVal[(int)ColorPiece::BQ];
+            if (!((board.bboard[(int)ColorPiece::WP] | board.bboard[(int)ColorPiece::BP]) & Board::GetFileMaskSquare(sq))) score-=QueenOpenFile;
+            else if (!(board.bboard[(int)ColorPiece::BP] & Board::GetFileMaskSquare(sq))) score-=QueenSemiOpenFile;
+        }
+        const auto wking = bit_scan_forward(board.bboard[(int)ColorPiece::WK]);
+        if (bmaterial <= ENDGAME_MAT) score += KingE[wking];
+        else score += KingO[wking];
+        const auto bking = flip[bit_scan_forward(board.bboard[(int)ColorPiece::BK])];
+        if (wmaterial <= ENDGAME_MAT) score -= KingE[bking];
+        else score -= KingO[bking];
+
+        if(wbishops >= 2) score += BishopPair;
+        if(bbishops >= 2) score -= BishopPair;
+
+        score+=wmaterial-bmaterial;
+
+        if constexpr (IsWhite) return score;
+        return -score;
+    }
     #else 
     //VICE evaluation
     static constexpr int PieceVal[13] = { 0, 100, 325, 325, 550, 1000, 50000, 100, 325, 325, 550, 1000, 50000 };
@@ -2291,14 +2476,6 @@ namespace ChessEngine
 
 
     #endif
-    #else 
-    static constexpr int first_layer = 768;
-    static constexpr int second_layer = 512;
-    static constexpr int third_layer = 32;
-    static constexpr int fourth_layer = 32;
-    static constexpr int fifth_layer = 1;
-    
-    #endif
     public:
         static constexpr int promotion_score[13] = {0, 0, -20000, -40000, -30000, 10000, 0, 0, -20000, -40000, -30000, 10000, 0};
         static constexpr int mvv_lva[12][12] = {
@@ -2321,6 +2498,7 @@ namespace ChessEngine
         int pv_table[MAX_PLY][MAX_PLY];
         int pv_length[MAX_PLY];
         int lmred[MAX_PLY][64];
+        int square_proximity[64][64];
     };
     
     namespace UCI{
