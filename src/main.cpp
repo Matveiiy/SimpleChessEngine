@@ -1424,17 +1424,16 @@ namespace ChessEngine
     struct SearchEngine{
     public:
         static constexpr int EVAL_DRAW = 0;
-        static constexpr int DRAW_TUNE = 1;
         static constexpr int EVAL_MATE = 32000;
         static constexpr int EVAL_INFINITY = 33000;
         static constexpr int VeryLateMove = 13;
         static constexpr int VeryLatePly = 3;
         static constexpr int FullDepthMoves = 4;
         static constexpr int WindowMargin = 50;
-        static constexpr int FutilityMargin = 100;
+        static constexpr int FutilityMargin = 50;
 	    static constexpr bool do_null_move = true;
+        static constexpr bool UseFutilityPruning = false;
         static constexpr bool UseReverseFutilityPruning = true;
-        static constexpr bool UseRazoring = false;
         //maybe internal iterative deepening like in  fruit
         static const int IIDepth = 3;
         bool use_book = false, follow_pv;
@@ -1616,7 +1615,7 @@ namespace ChessEngine
         template<bool IsWhite, bool HasTime, bool Eval=false>
         int quiet_search(int alpha, int beta) {
             nodes++;
-            if (is_repetition(board.current_key)) return EVAL_DRAW+DRAW_TUNE;
+            if (is_repetition(board.current_key)) return EVAL_DRAW;
             auto eval = Evaluate<IsWhite>();
             if (eval >= beta) return beta;
             if (eval > alpha) alpha = eval;
@@ -1651,39 +1650,33 @@ namespace ChessEngine
             //std::cout << spaces << "In Fen: " << board.GetFen() << " static eval: " << Evaluate<IsWhite>() << '\n';
             return alpha;
         }
-        inline static constexpr bool is_move_interesting(const Move& move, const bool& in_check) {
+        inline static constexpr bool is_dangerous(const Move& move, const bool& in_check) {
             return in_check || GetMoveCapture(move) || (GetMoveType(move) == MoveType::PROMOTION);
         }
         template <bool IsWhite, bool HasTime>
         int negamax(int depth, int alpha, int beta) {
             pv_length[ply] = ply;
-            int score; 
+            int score;
             Move best = NullMove;
-            if (ply && is_repetition(board.current_key)) return EVAL_DRAW+DRAW_TUNE;
+            if (ply && is_repetition(board.current_key)) return EVAL_DRAW;
             bool pv_node = beta-alpha > 1;
             if (ply && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH && !pv_node) return score;
             if (depth <= 0) return quiet_search<IsWhite, HasTime>(alpha, beta);
             if (ply > MAX_PLY-1) return Evaluate<IsWhite>();
             bool in_check = board.IsKingInCheck<IsWhite>();
+            bool f_prune = false; 
+            int eval = -EVAL_INFINITY;
             if (in_check) depth++;
             else {
-                if (depth < 3 && !pv_node && !in_check) {
-                    //Maybe quiet search here for more stability???
-                    const int static_eval = Evaluate<IsWhite>();
-                    if (UseReverseFutilityPruning) { 
-
-                        //reverse futility prunning 
-                        const int eval_margin = 120 * depth;
-                        const auto prun = static_eval - eval_margin;
-                        if (prun >= beta) return prun;
-                    }
-                    if (UseRazoring) {
-                        //----EXPERIMENTAL!!!----- 
-                        if (depth == 1) if (static_eval + 125 < alpha) return alpha;
-                        else if (static_eval + 326 < alpha) return alpha;
-                    }
+                //static eval pruning ~30 elo
+                if (UseReverseFutilityPruning && depth < 3 && !pv_node && !in_check && abs(beta - 1) > -EVAL_INFINITY + 100) //abs(beta - 1) > -EVAL_INFINITY + 100 ??????????
+                {
+                    eval = Evaluate<IsWhite>();
+                    const int eval_margin = 120 * depth;
+                    const int diff = eval - eval_margin;
+                    if (diff >= beta) return diff;
                 }
-                //null move prunning
+                //null move pruning ~ 100 elo
                 if (do_null_move && depth>=3 && ply) {
                     const auto saved_pv = follow_pv;
                     //const auto saved_key = board.current_key;
@@ -1715,7 +1708,11 @@ namespace ChessEngine
                         return beta;
                     }
                 }
-                
+                //futility pruning ~0 elo
+                if (UseFutilityPruning && depth == 1 && !pv_node &&  !in_check && abs(alpha) < 9000) {
+                    if (eval == -EVAL_INFINITY) eval = Evaluate<IsWhite>();
+                    if (eval + FutilityMargin <= alpha) f_prune = true;
+                }
                
             }
             int hashf = HASHF_ALPHA;
@@ -1733,19 +1730,23 @@ namespace ChessEngine
                 auto move = moves.move_storage[i];
                 board.MakeMove<IsWhite>(move);
                 if (board.IsKingInCheck<IsWhite>()) {board.UndoMove<IsWhite>(move);continue;}
+                if (f_prune && !is_dangerous(move, in_check) && killers[0][ply] != moves.move_storage[i] && killers[0][ply] != moves.move_storage[i]) {board.UndoMove<IsWhite>(move);break;}
                 ++ply;repetition_table[++repetition_index] = board.current_key;
                 if (!temp_move_count) score = -negamax<!IsWhite, HasTime>(depth-1, -beta, -alpha);
                 //boring move check
                 
                 else {
                     int red = 0;
-                    //Late move reduction(LMR)
-                    if (temp_move_count >= FullDepthMoves 
-                    && depth >= 3 && !is_move_interesting(move, in_check)) {
-                        red = lmred[depth][std::min(63, temp_move_count)]; 
-                        if (pv_node) score = -negamax<!IsWhite, HasTime>(depth - 1 - red/2, -alpha-1, -alpha);
-                        else score = -negamax<!IsWhite, HasTime>(depth - 1 - red, -alpha-1, -alpha);
-                    }
+                    if (!is_dangerous(move, in_check)) {
+                        //Late Move Reduction(LMR)
+                        if (temp_move_count>=FullDepthMoves && depth >= 3) {
+                            red = lmred[pv_node][std::min(depth, 32)][std::min(63, temp_move_count)]; 
+                            //if (pv_node) red = std::max(0, red-2);
+                            //red = depth / 3 + (temp_move_count - 5) / 4;
+                            score = -negamax<!IsWhite, HasTime>(depth - 1 - red, -alpha-1, -alpha);
+                        }
+                        else score = alpha+1;
+                    } 
                     /*
                     if (ply && (!in_check) &&
                     (!GetMoveCapture(move)) && 
@@ -1771,8 +1772,10 @@ namespace ChessEngine
                             score = -negamax<!IsWhite, HasTime>(depth - 1, -beta, -alpha);
                     }
                 }
-                --ply;--repetition_index;++temp_move_count;
+                --ply;--repetition_index;
                 board.UndoMove<IsWhite>(move);
+                
+                ++temp_move_count;
                 //1717016
                 //R4r1k/6pp/2pq4/2n2b2/2Q1pP1b/1r2P2B/NP5P/2B2KNR b - - 1 24
                 //1012458 => 980435
@@ -1784,13 +1787,13 @@ namespace ChessEngine
                     if (!GetMoveCapture(move)) {
                         killers[1][ply] = killers[0][ply];
                         killers[0][ply] = moves.move_storage[i];
-                        //history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)] += depth;
+                        //if (!GetMoveCapture(move)) history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)] += depth*depth;
                     }
                     write_hash_entry(depth, board.current_key, beta, HASHF_BETA, moves.move_storage[i]);
                     return beta;
                 }
                 if (score > alpha) {
-                    if (!GetMoveCapture(move)) history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)] += depth;
+                    if (!GetMoveCapture(move)) history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)] += depth*depth;
                     best = moves.move_storage[i];
                     
                     alpha = score;
@@ -1810,7 +1813,7 @@ namespace ChessEngine
                 if (board.IsKingInCheck<IsWhite>()) {
                     return -EVAL_MATE + ply;
                 }
-                return EVAL_DRAW+DRAW_TUNE;
+                return EVAL_DRAW;
             }
             write_hash_entry(depth, board.current_key, alpha, hashf, best);
             return alpha;
@@ -1825,10 +1828,21 @@ namespace ChessEngine
                     square_proximity[i][j] = 7 - std::max(std::abs(file_i - file_j), std::abs(row_i - row_j));
                 }
             }
-            for (int d = 3; d < 32; d++) {
+            for (int d = 3; d < 33; d++) {
                 for (int l = 1; l < 64; l++) {
-                    lmred[d][l] = int(std::log2(l) * std::log2(d) * 0.4);//0.4 idealy
-                    if (lmred[d][l] > d-2) lmred[d][l] = d-2;
+                    //0 - any node
+                    //1 - pv node
+                    //lmred[0][d][l] = int(std::log(l) * std::log(d) / 1.95);    //Stockfish
+                    //lmred[1][d][l] = int(std::log(l) * std::log(d) / 1.95) - 2;//Stockfish
+                    //lmred[0][d][l] = int(sqrtl(d-1) + sqrt(l-1));          //Fruit Reloaded
+                    //lmred[1][d][l] = int((sqrtl(d-1) + sqrt(l-1)) * 2 / 3);//Fruit Reloaded
+
+                    //lmred[0][d][l] = int(sqrtl(d-1) + sqrt(l-1));
+                    //lmred[1][d][l] = int((sqrtl(d-1) + sqrt(l-1)) * 29 / 45);
+                    
+                    lmred[0][d][l] = int(std::log2(l) * std::log2(d) * 0.4);//0.4 idealy
+                    lmred[1][d][l] = int(std::log2(l) * std::log2(d) * 0.4)/2;
+                    if (lmred[0][d][l] > d-2) lmred[0][d][l] = d-2;
                 }
             }
             board.InitBoard();
@@ -2285,7 +2299,7 @@ namespace ChessEngine
         if(bbishops >= 2) score -= BishopPair;
 
         score+=wmaterial-bmaterial;
-
+        score = std::clamp(score, -EVAL_MATE+50, EVAL_MATE-50);
         if constexpr (IsWhite) return score;
         return -score;
     }
@@ -2497,7 +2511,7 @@ namespace ChessEngine
         Move history[12][64] = {};
         int pv_table[MAX_PLY][MAX_PLY];
         int pv_length[MAX_PLY];
-        int lmred[MAX_PLY][64];
+        int lmred[2][33][64];
         int square_proximity[64][64];
     };
     
@@ -2971,12 +2985,12 @@ inline void debug_search(SearchEngine& engine) {
 //    better time managment
 //    own opening book
 //    slightly better evaluation
-//    razoring, hash move ordering, static eval prunning
+//    razoring, hash move ordering, static eval pruning
 #ifdef DEBUGGING_YET
 int main() {
     #define SetBoardFen(ss) if (!engine.board.SetFen((ss))) {std::cout << "Invalid fen\n";return 0; }
     //todo:
-    // follow pv after null move prunning?
+    // follow pv after null move pruning?
     // add queen table
     // add bishop, queen mobility
     // check passed pawn eval black
