@@ -1617,7 +1617,7 @@ namespace ChessEngine
             nodes++;
             if (is_repetition(board.current_key)) return EVAL_DRAW;
             auto eval = Evaluate<IsWhite>();
-            if (eval >= beta) return beta;
+            if (eval >= beta) return eval;
             if (eval > alpha) alpha = eval;
             if (ply > MAX_PLY-1) return eval;
             MoveList moves;
@@ -1639,7 +1639,7 @@ namespace ChessEngine
                 if (score > alpha) {
                     alpha = score;
                     if (score >= beta) {
-                        return beta;
+                        return score;
                     }
                 }
             }
@@ -1705,7 +1705,7 @@ namespace ChessEngine
                     if (UCI::stopped) return 0;
                     if constexpr (HasTime) {if (get_time_ms() > stoptime) {UCI::stopped = true;return 0;}}
                     if (score >= beta) {
-                        return beta;
+                        return score;
                     }
                 }
                 //futility pruning ~0 elo
@@ -1741,8 +1741,6 @@ namespace ChessEngine
                         //Late Move Reduction(LMR)
                         if (temp_move_count>=FullDepthMoves && depth >= 3) {
                             red = lmred[pv_node][std::min(depth, 32)][std::min(63, temp_move_count)]; 
-                            //if (pv_node) red = std::max(0, red-2);
-                            //red = depth / 3 + (temp_move_count - 5) / 4;
                             score = -negamax<!IsWhite, HasTime>(depth - 1 - red, -alpha-1, -alpha);
                         }
                         else score = alpha+1;
@@ -1790,10 +1788,10 @@ namespace ChessEngine
                         //if (!GetMoveCapture(move)) history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)] += depth*depth;
                     }
                     write_hash_entry(depth, board.current_key, beta, HASHF_BETA, moves.move_storage[i]);
-                    return beta;
+                    return score;
                 }
                 if (score > alpha) {
-                    if (!GetMoveCapture(move)) history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)] += depth*depth;
+                    if (!GetMoveCapture(move)) history[(int)board.piece_board[(int)GetMoveFrom(move)]-1][(int)GetMoveTo(move)] += depth;
                     best = moves.move_storage[i];
                     
                     alpha = score;
