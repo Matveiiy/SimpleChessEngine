@@ -1841,8 +1841,8 @@ namespace ChessEngine
                     //lmred[1][d][l] = int((sqrtl(d-1) + sqrt(l-1)) * 29 / 45);
                     
                     lmred[0][d][l] = int(std::log2(l) * std::log2(d) * 0.4);//0.4 idealy
-                    lmred[1][d][l] = int(std::log2(l) * std::log2(d) * 0.2);
                     if (lmred[0][d][l] > d-2) lmred[0][d][l] = d-2;
+                    lmred[1][d][l] = int(std::log2(l) * std::log2(d) * 0.2);
                 }
             }
             board.InitBoard();
