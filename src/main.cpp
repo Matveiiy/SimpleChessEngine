@@ -1669,7 +1669,7 @@ namespace ChessEngine
             if (in_check) depth++;
             else {
                 //static eval pruning ~30 elo
-                if (UseReverseFutilityPruning && depth < 3 && !pv_node && !in_check && abs(beta - 1) > -EVAL_INFINITY + 100) //abs(beta - 1) > -EVAL_INFINITY + 100 ??????????
+                if (UseReverseFutilityPruning && depth < 3 && !pv_node) //abs(beta - 1) > -EVAL_INFINITY + 100 ??????????
                 {
                     eval = Evaluate<IsWhite>();
                     const int eval_margin = 120 * depth;
@@ -1709,7 +1709,7 @@ namespace ChessEngine
                     }
                 }
                 //futility pruning ~0 elo
-                if (UseFutilityPruning && depth == 1 && !pv_node &&  !in_check && abs(alpha) < 9000) {
+                if (UseFutilityPruning && depth == 1 && !pv_node && abs(alpha) < 9000) {
                     if (eval == -EVAL_INFINITY) eval = Evaluate<IsWhite>();
                     if (eval + FutilityMargin <= alpha) f_prune = true;
                 }
