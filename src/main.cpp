@@ -2229,14 +2229,14 @@ namespace ChessEngine
             const auto sq = bit_scan_forward(bb);reset_lsb(bb);
             wmaterial+=PieceVal[(int)ColorPiece::WN];
             score+=KnightTable[sq];
-            score+=KnightMobility * (count_bits(Board::KnightAttacks(sq) & ~board.cur_all) - 3);
+            score+=KnightMobility * (count_bits(Board::KnightAttacks(sq) & ~whitebb) - 3);
         }
         bb = board.bboard[(int)ColorPiece::BN];
         while (bb) {
             const auto sq = bit_scan_forward(bb);reset_lsb(bb);
             bmaterial+=PieceVal[(int)ColorPiece::BN];
             score-=KnightTable[flip[sq]];
-            score-=KnightMobility * (count_bits(Board::KnightAttacks(sq) & ~board.cur_all) - 3);
+            score-=KnightMobility * (count_bits(Board::KnightAttacks(sq) & ~blackbb) - 3);
         }
         bb = board.bboard[(int)ColorPiece::WB];
         while (bb) {
