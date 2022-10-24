@@ -2201,6 +2201,7 @@ namespace ChessEngine
         int score = 0;
         int wbishops = 0, bbishops = 0;
         int bmaterial = 0, wmaterial = 0;
+        int same_color_bishops = 0;
         //todo: test passed pawns
         //pos->material[WHITE] - pos->material[BLACK];
         bitboard bb;
@@ -2245,6 +2246,7 @@ namespace ChessEngine
             score+=BishopTable[sq];
             score += BishopMobility * (count_bits(Board::BishopAttacks(sq, board.cur_all) & ~whitebb) - 5);
             wbishops++;
+            same_color_bishops += int(sq%2)*2-1;
         }
         bb = board.bboard[(int)ColorPiece::BB];
         while (bb) {
@@ -2252,6 +2254,7 @@ namespace ChessEngine
             bmaterial+=PieceVal[(int)ColorPiece::BB];
             score-=BishopTable[flip[sq]];
             score -= BishopMobility * (count_bits(Board::BishopAttacks(sq, board.cur_all) & ~blackbb) - 5);
+            same_color_bishops += int(sq%2)*2-1;
             bbishops++;
         }
         bb = board.bboard[(int)ColorPiece::WR];
@@ -2297,6 +2300,18 @@ namespace ChessEngine
         if(bbishops >= 2) score -= BishopPair;
 
         score+=wmaterial-bmaterial;
+
+        /*
+        TODO: TEST
+        if (score > 0 && board.bboard[(int)ColorPiece::WP] == 0) {
+            if (wmaterial <= 400) score = 0; 
+        }
+        else if (score < 0 && board.bboard[(int)ColorPiece::BP] == 0) {
+            if (bmaterial <= 400) score = 0; 
+        }
+        if (wbishops == 1 && bbishop == 1 && !same_color_bishops) score = score*4/5;
+        */
+
         score = std::clamp(score, -EVAL_MATE+50, EVAL_MATE-50);
         if constexpr (IsWhite) return score;
         return -score;
