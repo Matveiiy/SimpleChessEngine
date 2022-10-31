@@ -1431,12 +1431,11 @@ namespace ChessEngine
         static constexpr int FullDepthMoves = 4;
         static constexpr int WindowMargin = 50;
         static constexpr int FutilityMargin = 50;
-	    static constexpr bool do_null_move = true;
         static constexpr bool UseFutilityPruning = false;
         static constexpr bool UseReverseFutilityPruning = true;
         //maybe internal iterative deepening like in  fruit
         static const int IIDepth = 3;
-        bool use_book = false, follow_pv;
+        bool use_book = false, follow_pv, do_null_move = true;
         int ply=0;
         Board board;
         int nodes = 0;
@@ -1502,6 +1501,12 @@ namespace ChessEngine
         void go_position(int depth, int endtime = 0, bool very_fast = false) {
             int alpha = -EVAL_INFINITY, beta = EVAL_INFINITY, score=0;
             if constexpr (HasTime) stoptime = endtime;
+            
+            do_null_move = (count_bits(board.bboard[(int)ColorPiece::WP])*100 + count_bits(board.bboard[(int)ColorPiece::BP]*100)
+             + count_bits(board.bboard[(int)ColorPiece::WN])*300 + count_bits(board.bboard[(int)ColorPiece::BN]*300)
+             + count_bits(board.bboard[(int)ColorPiece::WB])*300 + count_bits(board.bboard[(int)ColorPiece::BB] * 300)
+             + count_bits(board.bboard[(int)ColorPiece::WR])*500 + count_bits(board.bboard[(int)ColorPiece::BR]*500)
+             + count_bits(board.bboard[(int)ColorPiece::WQ])*910 + count_bits(board.bboard[(int)ColorPiece::BQ])*910) > 2800;
             //std::cout << stoptime << ' ' << get_time_ms() << '\n';
             ply = 0; nodes = 0;follow_pv = false;
             memset(killers, 0, sizeof killers);
@@ -1654,7 +1659,7 @@ namespace ChessEngine
             return in_check || GetMoveCapture(move) || (GetMoveType(move) == MoveType::PROMOTION);
         }
         template <bool IsWhite, bool HasTime>
-        int negamax(int depth, int alpha, int beta) {
+        int negamax(int depth, int alpha, int beta, bool can_null_move = true) {
             pv_length[ply] = ply;
             int score;
             Move best = NullMove;
@@ -1667,9 +1672,9 @@ namespace ChessEngine
             bool f_prune = false; 
             int eval = -EVAL_INFINITY;
             if (in_check) depth++;
-            else {
+            else if (!pv_node) {
                 //static eval pruning ~30 elo
-                if (UseReverseFutilityPruning && depth < 3 && !pv_node) //abs(beta - 1) > -EVAL_INFINITY + 100 ??????????
+                if (UseReverseFutilityPruning && depth < 3) //abs(beta - 1) > -EVAL_INFINITY + 100 ??????????
                 {
                     eval = Evaluate<IsWhite>();
                     const int eval_margin = 120 * depth;
@@ -1677,7 +1682,7 @@ namespace ChessEngine
                     if (diff >= beta) return diff;
                 }
                 //null move pruning ~ 100 elo
-                if (do_null_move && depth>=3 && ply) {
+                if (do_null_move && can_null_move && depth>=3 && ply) {
                     const auto saved_pv = follow_pv;
                     //const auto saved_key = board.current_key;
                     board.move_count++;ply++;repetition_table[++repetition_index] = board.current_key;
@@ -1688,14 +1693,14 @@ namespace ChessEngine
                         board.current_key^=Board::enpassant_keys[saved];
                         board.current_key^=Board::enpassant_keys[0];
                         
-                        score = -negamax<!IsWhite, HasTime>(depth - 1 - 2, -beta, -beta+1);
+                        score = -negamax<!IsWhite, HasTime>(depth - 1 - 2, -beta, -beta+1, false);
                         
                         board.en_passant = (Square)saved;
                         board.current_key^=Board::enpassant_keys[0];
                         board.current_key^=Board::enpassant_keys[saved];
                     }
                     else {
-                        score = -negamax<!IsWhite, HasTime>(depth - 1 - 2, -beta, -beta+1);
+                        score = -negamax<!IsWhite, HasTime>(depth - 1 - 2, -beta, -beta+1, false);
                     }
                     ply--;--repetition_index;
                     board.move_count--;
@@ -1709,7 +1714,7 @@ namespace ChessEngine
                     }
                 }
                 //futility pruning ~0 elo
-                if (UseFutilityPruning && depth == 1 && !pv_node && abs(alpha) < 9000) {
+                if (UseFutilityPruning && depth == 1 && abs(alpha) < 9000) {
                     if (eval == -EVAL_INFINITY) eval = Evaluate<IsWhite>();
                     if (eval + FutilityMargin <= alpha) f_prune = true;
                 }
