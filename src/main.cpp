@@ -11,7 +11,7 @@
 #include <thread>
 #include <cmath>
 #include <sstream>
-#include <unordered_map>
+#include <ext/pb_ds/assoc_container.hpp>
 #ifdef WIN64
     #include <windows.h>
 #else
@@ -210,53 +210,41 @@ namespace ChessEngine
     static constexpr int HASHF_ALPHA = 1;
     static constexpr int HASHF_BETA = 2;
     struct tagHASH{
-        hash_key key; 
-        Move best;  
-        int depth;      
+        Move best = NullMove;  
+        int depth = -1;      
         int flags;       
         int score;  
     };
+    uint64_t hash_hit = 0;
     inline hash_key repetition_table[700] = {};
     inline int repetition_index = 0;
-    inline tagHASH* hash_table;
-    uint64_t hash_hit = 0;
+    inline __gnu_pbds::gp_hash_table<hash_key, tagHASH> hash_table;
+    //inline tagHASH* hash_table;
     inline bool is_repetition(hash_key key) {for (int i = 0; i < repetition_index; i++) {if (key == repetition_table[i]) return true;}return false;}
-    inline void clear_hash_table() {
-        for (int i = 0; i < hash_size; ++i) {
-            hash_table[i].key = 0;
-            hash_table[i].depth = 0;
-            hash_table[i].flags = 0;
-            hash_table[i].score = 0;
-            hash_table[i].best = 0;
-        }
-    }
+    inline void clear_hash_table() {hash_table.clear();}
     inline int read_hash_entry(int depth, auto& key, int alpha, int beta, Move& best) {
-        tagHASH* phase = &hash_table[key % hash_size];
+        tagHASH& phase = hash_table[key];
         hash_hit++;
-        if (phase->key == key) {
-            if (phase->depth >= depth) {
-                if (phase->flags == HASHF_EXACT)
-                    return phase->score;
-                if ((phase->flags == HASHF_ALPHA) &&
-                    (phase->score <= alpha))
-                    return alpha;
-                if ((phase->flags == HASHF_BETA) &&
-                    (phase->score >= beta))
-                    return beta;
-            }
-            best = phase->best;
-            //RememberBestMove();
+        if (phase.depth >= depth) {
+            if (phase.flags == HASHF_EXACT)
+                return phase.score;
+            if ((phase.flags == HASHF_ALPHA) &&
+                (phase.score <= alpha))
+                return alpha;
+            if ((phase.flags == HASHF_BETA) &&
+                (phase.score >= beta))
+                return beta;
         }
         hash_hit--;
+        best = phase.best;
         return NO_HASH;
     }
     inline void write_hash_entry(int depth, auto& key, int val, int hashf, Move best) {
-        tagHASH* phashe = &hash_table[key % hash_size];
-        phashe->key = key;
-        phashe->score = val;
-        phashe->flags = hashf;
-        phashe->depth = depth;
-        phashe->best = best;
+        tagHASH& phashe = hash_table[key];
+        phashe.score = val;
+        phashe.flags = hashf;
+        phashe.depth = depth;
+        phashe.best = best;
     }
     static inline constexpr int MAX_PLY = 64;
     struct Board{
@@ -293,7 +281,6 @@ namespace ChessEngine
                 for (int j = 0; j < 8; j++)
                 {
                     std::cout << '|' << piece_chars[(int)piece_board[i*8+j]];
-                    //Console.Write(' ');
                 }
                 std::cout << "|\n";           
                 std::cout << "-----------------\n";
@@ -320,11 +307,9 @@ namespace ChessEngine
                     if ((int)piece_board[i*8+j]) continue;
                     int num = fen[pos] - '1';
                     if (num < 0 || num > 8) return false;
-                    //std::cout << num << '\n';
                     j+=num;
                     pos++;
                 }
-                //std::cout << j << i << ' ' << pos << '\n';
                 if (j!=8) return false;
                 if (i == 0) {
                     if (fen[pos] != ' ') return false;
@@ -455,10 +440,6 @@ namespace ChessEngine
         }
         template<bool WhiteKing> bool IsKingInCheck(bitboard enemy_mask) {if (WhiteKing) return (enemy_mask & bboard[(int)ColorPiece::WK]);else return (enemy_mask & bboard[(int)ColorPiece::BK]);} 
         template<bool IsWhite> bitboard GetAttackMask() {
-            //auto bishops = bboard[(int)ColorPiece.BB];
-            //auto rooks = bboard[(int)ColorPiece.BR];
-            //auto knights = bboard[(int)ColorPiece.BN];
-            //auto queen = bboard[(int)ColorPiece.BQ];
             bitboard attack_mask, temp;
             if constexpr (IsWhite)  attack_mask = ((bboard[(int)ColorPiece::WP] << 9) & NotAFile) | ((bboard[(int)ColorPiece::WP] << 7) & NotHFile);
             else attack_mask = ((bboard[(int)ColorPiece::BP] >> 9) & NotHFile) | ((bboard[(int)ColorPiece::BP] >> 7) & NotAFile); 
@@ -805,7 +786,6 @@ namespace ChessEngine
             available2 &= Not8Rank;
             quiet &= Not8Rank;
 
-            // !!!!!!!!!bug bacause moves and moves - the same name
             //Board.print_move(moves[move_count - 1]);
             //available = (available << 9);
             // 0 0 0   0 0 0   0 0 0
@@ -909,7 +889,6 @@ namespace ChessEngine
             available2 &= Not1Rank;
             quiet &= Not1Rank;
 
-            // !!!!!!!!!bug bacause moves and moves - the same name
             //Board.print_move(moves[move_count - 1]);
             //available = (available << 9);
             // 0 0 0   0 0 0   0 0 0
@@ -1190,8 +1169,8 @@ namespace ChessEngine
                 king_attacks[i] = mask_king_attacks(i);
                 knight_attacks[i] = mask_knight_attacks(i);
             }
-            hash_table = new tagHASH[hash_size];
-            clear_hash_table();
+            //hash_table.resize(hash_size);
+            //hash_table.resize(hash_size);
             InitSliders(1);InitSliders(0);
             for (int i = 0; i< 64; ++i) {
                 for (int j = 0; j < 12; ++j) {
@@ -1663,13 +1642,15 @@ namespace ChessEngine
         }
         template <bool IsWhite, bool HasTime>
         int negamax(int depth, int alpha, int beta, bool can_null_move = true) {
-	        //++nodes;
+            ++nodes;
             pv_length[ply] = ply;
             int score;
             Move best = NullMove;
             if (ply && is_repetition(board.current_key)) return EVAL_DRAW;
             bool pv_node = beta-alpha > 1;
-            if (ply && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH && !pv_node) return score;
+            if (ply && (score = read_hash_entry(depth, board.current_key, alpha, beta, best)) != NO_HASH && !pv_node) {
+                return score;
+            }
             if (depth <= 0) return quiet_search<IsWhite, HasTime>(alpha, beta);
             if (ply > MAX_PLY-1) return Evaluate<IsWhite>();
             bool in_check = board.IsKingInCheck<IsWhite>();
@@ -2661,10 +2642,7 @@ namespace ChessEngine
                     //std::cout << engine.board.GetFen() << '\n';
                     std::cout << "Hash key: " << engine.board.current_key << '\n';
                     if (engine.board.IsWhiteToMove()) std::cout << "White to move\n";
-                    else  std::cout << "Black to move\n";
-                    std::cout << '\n';
-                    MoveList moves;
-                    engine.board.GenMovesUnchecked<false>(moves);
+                    else  std::cout << "Black to move\n\n";
                 }
                 else if (cmd == "go") {
                     //parse go
@@ -2802,10 +2780,8 @@ namespace ChessEngine
                         if (hash_size < 1) hash_size = 1;
                         #ifndef TEST_RELEASE
                         hash_size=new_hash_size;
-                        delete[] hash_table;
-                        hash_table = new tagHASH[hash_size];
+                        //hash_table.resize(hash_size);
                         #endif
-                        clear_hash_table();
                     }
                     else if (cmd == "OwnBook") {
                         std::cin >> cmd;
@@ -3150,8 +3126,7 @@ int main() {
 #else 
 int main() {
     /*
-    g++ -Ofast -o main  main.cpp 
-    //x86_64-w64-mingw32-gcc -Ofast bbc.c -o ../bin/bbc.exe
+    g++ -Ofast -fomit-frame-pointer main.cpp -o main -DUSE_SSE41 -msse4.1 -DUSE_SSSE3 -mssse3 -DUSE_SSE2 -msse2 -DUSE_SSE -msse
     */
     using namespace ChessEngine;
     std::ios_base::sync_with_stdio(false);
@@ -3167,7 +3142,6 @@ int main() {
     #endif
     engine.Init();
     UCI::uci_loop(engine);
-    delete[] hash_table;
     return 0;
 }
 #endif
