@@ -1660,6 +1660,7 @@ namespace ChessEngine
         }
         template <bool IsWhite, bool HasTime>
         int negamax(int depth, int alpha, int beta, bool can_null_move = true) {
+	    ++nodes;
             pv_length[ply] = ply;
             int score;
             Move best = NullMove;
