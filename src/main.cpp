@@ -219,6 +219,7 @@ namespace ChessEngine
     inline hash_key repetition_table[700] = {};
     inline int repetition_index = 0;
     inline tagHASH* hash_table;
+    uint64_t hash_hit = 0;
     inline bool is_repetition(hash_key key) {for (int i = 0; i < repetition_index; i++) {if (key == repetition_table[i]) return true;}return false;}
     inline void clear_hash_table() {
         for (int i = 0; i < hash_size; ++i) {
@@ -231,6 +232,7 @@ namespace ChessEngine
     }
     inline int read_hash_entry(int depth, auto& key, int alpha, int beta, Move& best) {
         tagHASH* phase = &hash_table[key % hash_size];
+        hash_hit++;
         if (phase->key == key) {
             if (phase->depth >= depth) {
                 if (phase->flags == HASHF_EXACT)
@@ -245,6 +247,7 @@ namespace ChessEngine
             best = phase->best;
             //RememberBestMove();
         }
+        hash_hit--;
         return NO_HASH;
     }
     inline void write_hash_entry(int depth, auto& key, int val, int hashf, Move best) {
@@ -1501,7 +1504,7 @@ namespace ChessEngine
         void go_position(int depth, int endtime = 0, bool very_fast = false) {
             int alpha = -EVAL_INFINITY, beta = EVAL_INFINITY, score=0;
             if constexpr (HasTime) stoptime = endtime;
-            
+            hash_hit = 0;
             do_null_move = (count_bits(board.bboard[(int)ColorPiece::WP])*100 + count_bits(board.bboard[(int)ColorPiece::BP]*100)
              + count_bits(board.bboard[(int)ColorPiece::WN])*300 + count_bits(board.bboard[(int)ColorPiece::BN]*300)
              + count_bits(board.bboard[(int)ColorPiece::WB])*300 + count_bits(board.bboard[(int)ColorPiece::BB] * 300)
@@ -1568,7 +1571,7 @@ namespace ChessEngine
                 }
                 std::cout.flush();
             }
-
+            std::cout << "info string hash_hit = " << hash_hit << '\n';
             std::cout << "bestmove " << move_to_string(pv_table[0][0]) << '\n';
             std::cout.flush();
             UCI::stopped = true;
@@ -1660,7 +1663,7 @@ namespace ChessEngine
         }
         template <bool IsWhite, bool HasTime>
         int negamax(int depth, int alpha, int beta, bool can_null_move = true) {
-	    ++nodes;
+	        //++nodes;
             pv_length[ply] = ply;
             int score;
             Move best = NullMove;
