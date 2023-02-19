@@ -28,6 +28,8 @@ inline int bit_scan_forward(const auto& x) { return __builtin_ctzll(x);}
 inline int count_bits(const auto& x) {return __builtin_popcountll(x); }
 inline int get_time_ms()
 {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    /*
     #ifdef WIN64
         return GetTickCount();
     #else
@@ -35,6 +37,7 @@ inline int get_time_ms()
         gettimeofday(&time_value, NULL);
         return time_value.tv_sec * 1000 + time_value.tv_usec / 1000;
     #endif
+    */
 }
 inline void reset_lsb(auto& x) {x&=x-1;}
 inline void print_bitboard(bitboard bb) {
@@ -2719,13 +2722,13 @@ namespace ChessEngine
                     {
                         timeset = 1;
                         time /= movestogo;
-                        time -= 50;
+                        time -= 10;
                         //almost no time left
                         if (time < 0) {
                             time_up = true;
                             time = 0;
                             //compensation
-                            inc -= 50;
+                            inc -= 10;
                             
                             if (inc < 0) inc = 1;
                         }
