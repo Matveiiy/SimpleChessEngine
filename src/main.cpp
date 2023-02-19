@@ -2648,7 +2648,7 @@ namespace ChessEngine
                     //parse go
                     std::getline(std::cin, cmd);
                     std::stringstream ss(cmd);
-                    int movetime = -1, time = -1, inc = 0, movestogo = 30, depth = -1;
+                    int movetime = -1, time = -1, inc = 0, movestogo = 40, depth = -1;
                     UCI::starttime = 0;UCI::stoptime=0;
                     timeset = false;
                     while (ss >> cmd) {
