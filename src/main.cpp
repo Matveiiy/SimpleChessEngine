@@ -2722,13 +2722,13 @@ namespace ChessEngine
                     {
                         timeset = 1;
                         time /= movestogo;
-                        time -= 10;
+                        time -= 25;
                         //almost no time left
                         if (time < 0) {
                             time_up = true;
                             time = 0;
                             //compensation
-                            inc -= 10;
+                            inc -= 25;
                             
                             if (inc < 0) inc = 1;
                         }
